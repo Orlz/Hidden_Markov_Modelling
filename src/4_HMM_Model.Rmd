@@ -1,0 +1,567 @@
+---
+title: "Hidden Markov Model"
+author: "Orla Mallon"
+date: "27/05/2022"
+output: html_document
+---
+
+This script takes the pre-processed data in the form of the coded variables, reshapes these into one dataframe, and then builds a series of models to test. The following steps are taken: 
+
+Covariates 
+1. Determine the number of states by varying the number of states from 1 - X and observing the BIC 
+2. Run the model 
+
+```{r}
+# quickfix 
+test <- data 
+data$Organic_Preference[data$Organic_Preference == 0] <- 2
+data$Price_Sensitivity[is.na(data$Price_Sensitivity)] <- 2
+sum(is.na(data$Price_Sensitivity))
+```
+
+## Setup 
+```{r setup}
+# -- working directory -- 
+getwd()
+
+# packages 
+# -- Modelling -- 
+library(LMest)
+# -- Data wrangling -- 
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(readr)
+library(mice)
+library(haven)
+library(rio)
+```
+
+```{r Load data}
+dairy_coded <- read.csv("data/coded_data/dairy.csv")
+meat_coded <- read.csv("data/coded_data/meat.csv")
+readymeal_coded <- read.csv("data/coded_data/readymeals.csv")
+confectionery_coded <- read.csv("data/coded_data/confectionery.csv")
+
+# Reclass the household cariable 
+dairy_coded$hhnr <- as.factor(dairy_coded$hhnr)
+meat_coded$hhnr <- as.factor(meat_coded$hhnr)
+readymeal_coded$hhnr <- as.factor(readymeal_coded$hhnr)
+confectionery_coded$hhnr <- as.factor(confectionery_coded$hhnr)
+
+```
+
+```{r reshape_data}
+# -- Set the data into long format (ie 8 rows per household for each period) -- 
+dairy_coded <- dairy_coded %>% 
+  pivot_longer(!hhnr, names_to = "Period", values_to = "Dairy")
+
+meat_coded <- meat_coded %>% 
+  pivot_longer(!hhnr, names_to = "Period", values_to = "Meat")
+
+readymeal_coded <- readymeal_coded %>% 
+  pivot_longer(!hhnr, names_to = "Period", values_to = "ReadyMeal")
+
+confectionery_coded <- confectionery_coded %>% 
+  pivot_longer(!hhnr, names_to = "Period", values_to = "Confectionery")
+
+
+# -- Get the data into one dataframe -- 
+# Here, we'll merge the meat, readymeal, and confectionery data onto the Dairy 
+data <- merge(dairy_coded, meat_coded)
+data <- merge(data, readymeal_coded)
+data <- merge(data, confectionery_coded)
+
+# Save dataframe 
+write.csv(data, "data/coded_data/model_data.csv")
+
+# clean up environment 
+rm(dairy_coded, meat_coded, readymeal_coded, confectionery_coded)
+
+# ensure hhnr is a factor 
+data$hhnr <- as.factor(data$hhnr)
+```
+
+## Merge the covariate data onto ```data```
+To include covariates in our model, which allow us to determine the way initial and transition probabilities are distributed, we can take some background knowledge on the households and create covariate factors. This will happen along 3 lines of interest: 
+
+1. Environmental factors 
+2. General demographics (Age)
+3. Economic factors (Organic attitude and price sensitivity)
+
+```{r load_household_data}
+# -- Load the full background data file -- 
+# Sensitive data file needs to be pulled locally 
+households <- import("~/OneDrive - Aarhus Universitet/GFK Data/data_2021/data/stamgfk2022.sas7bdat")
+
+# cut households to include only those in our data 
+hhnrs <- data %>% select(hhnr) %>% distinct()
+households <- households[households$hhnr %in% hhnrs$hhnr,] # 1019 obs 
+
+# make hhnr column a factor 
+households$hhnr <- as.factor(households$hhnr)
+
+rm(hhnrs)
+
+
+```
+
+#### -- Environmental -- 
+In the below chunk, we will calculate an individual 'environmental_concern' factor for each household. This will be the sum of 4 binary questions answered in their most recent background questionnaire. The steps below outline how this is calculated: 
+```{r environmental_factor}
+# Select the 4 attitude factors relevant to diet and the environment 
+environment <- households %>% 
+  select(hhnr, concerned_food_prod_climate, concerned_food_shortage,
+         concerned_growing_population, concerned_global_warming)
+
+# rename columns to shorter names 
+environment <- environment %>% 
+  rename(food_production = concerned_food_prod_climate, 
+         food_shortage = concerned_food_shortage, 
+         growing_pop = concerned_growing_population, 
+         global_warming = concerned_global_warming)
+
+# -- Inspect missing data -- 
+sum(is.na(environment)) # 140 instances 
+nas <- environment %>% subset(is.na(food_production)) # 35 households have not answered 
+
+# -- Replace missing data -- 
+# We'll replace this data by estimating what the most likely responses are using mice
+
+# First make each of the four columns factors 
+environment$food_production <- as.factor(environment$food_production)
+environment$food_shortage<- as.factor(environment$food_shortage)
+environment$growing_pop <- as.factor(environment$growing_pop)
+environment$global_warming <- as.factor(environment$global_warming)
+
+# Next, set up mice variables such as the method (binomial) and prediction matrix 
+init = mice(environment, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+
+# Set a seed and estimate values for the NAs 
+set.seed(318)
+imputed = mice(environment, method=meth, predictorMatrix=predM, m=5) # run 5 iterations 
+environment <- complete(imputed) # append results into the environment dataframe
+
+# Re-check for NAs 
+sum(is.na(environment)) # There are now 0 NAs
+
+# -- Next we'll create our environmental scale -- 
+# The factors are binary where 1 = "I am concerned" and 0 = "I am not concerned" 
+# Thus, if we add the 4 factors, we will get a 5-point scale from 0 - 4 of attitudes 
+# Whereby 4 = most envionmentally concerned and 0 = least environmentally concerned 
+
+# First, we have to convert our factor columns back to numerical 
+# NB: Re-factoring adds 1 to every value, so we'll subtract 1 from all columns
+environment$food_production <- as.numeric(environment$food_production) -1
+environment$food_shortage <- as.numeric(environment$food_shortage) -1 
+environment$growing_pop <- as.numeric(environment$growing_pop) -1 
+environment$global_warming <- as.numeric(environment$global_warming) -1 
+
+# Then we can add them together 
+environment <- environment %>% group_by(hhnr) %>% 
+  mutate(environmental_concern = food_production + food_shortage + 
+           growing_pop + global_warming)
+
+table(environment$environmental_concern)
+
+# We'll add 1 to each of the factors to put them on the same scale as other coveriates 
+environment$environmental_concern <- environment$environmental_concern + 1
+
+# Extract the environmental factor column and merge it onto the dataframe 
+environment <- environment %>% select(hhnr, environmental_concern)
+environment$hhnr <- as.factor(environment$hhnr)
+data$hhnr <- as.factor(data$hhnr)
+
+# -- Merge -- 
+data <- left_join(data, environment)
+
+# clean up environment 
+rm(environment, imputed, init, nas, predM, meth)
+
+```
+
+#### -- General Demographics -- 
+In the below chunk, we will extract the age band which the head of the household is in. Age is categorised into 7 categories: 0: NA, 1: 25yrs or younger, 2: 26-29yrs, 3: 30-39yrs, 4: 40-49yrs, 5: 50-59yrs, 6: 60-69yrs, 7: 70yrs or older)
+```{r household_demographics}
+# -- Age -- 
+# Age is categorised into 7 categories: 0: NA, 1: 25yrs or younger, 2: 26-29yrs, 3: 30-39yrs, 4: 40-49yrs, 5: 50-59yrs, 6: 60-69yrs, 7: 70yrs or older)
+table(households$dvi_age)
+
+# separate the age and look for NAs
+Age <- households %>% select(hhnr, dvi_age) %>% rename(Age = dvi_age)
+sum(is.na(Age$Age)) # there are no NAs
+
+# columns are factors 
+Age$hhnr <- as.factor(Age$hhnr)
+
+median(data$environmental_concern)
+
+# merge to data 
+data <- left_join(data, Age)
+rm(Age)
+```
+
+#### -- Economic Factors -- 
+In the below chunk, we will firstly extract how likely the consumer is to chose organic products. This question asks if the consumer prefers to buy organic products when it is possible, with answers on a 5-point scale where 1 = totally disagree and 5 = totally agree . 
+
+Secondly, we will ask how much of a concern money is to the consumer.  This question asks how much they relate to the following statement "I worry about money", with answers on a 5-point scale where 1 = totally disagree, and 5 = totally agree
+```{r economic_factors}
+# -- Organic Shopper -- 
+# This question asks if the consumer prefers to buy organic products when it is possible, with answers on a 5-point scale where 1 = totally disagree and 5 = totally agree 
+table(households$buy_organic)
+organic_shopping <- households %>% 
+                    select(hhnr, buy_organic) %>% 
+                    rename(Organic_Preference = buy_organic)
+
+# append to data 
+data <- left_join(data, organic_shopping)
+rm(organic_shopping)
+
+# -- Price Sensitivity -- 
+# This question asks the consumer how much they relate to the following statement "I worry about money", with answers on a 5-point scale where 1 = totally disagree, and 5 = totally agree
+table(households$worry_money)
+price_sensitivity <- households %>% 
+                     select(hhnr, worry_money) %>% rename(Price_Sensitivity = worry_money)
+
+# append to data 
+data <- left_join(data, price_sensitivity)
+rm(price_sensitivity)
+```
+
+```{r save data}
+
+# Add a column to data of time as a numeric column 
+data <- transform(data, Period_num = factor(Period, labels = c(1, 2, 3, 4, 5, 6, 7, 8)))
+
+# Save dataframe 
+write.csv(data, "data/coded_data/model_data.csv")
+```
+
+
+Prepare and explore data 
+```{r prepare_data}
+# Rename the hhnr column to id 
+data <- data %>% rename(id = hhnr, 
+                        time= Period_num,
+                        yDairy = Dairy,
+                        yMeat = Meat, 
+                        yReadyMeal = ReadyMeal,
+                        yConfectionery = Confectionery)
+
+# fix up the data classes 
+data$time <- as.numeric(data$time)
+
+# Get the data into the necessary LMest format 
+# 
+dt <- lmestData(data = data, id = "id", time="time",
+                responsesFormula= yDairy + yMeat + yReadyMeal + yConfectionery ~NULL)
+
+# -- Inspect the data -- 
+summary(dt, dataSummary="responses", varType=rep("c",ncol(dt$Y)))
+```
+
+## Part 1: Determine the number of states 
+The first step in building our model is determining how many latent states exist within the data. These can be determined by varying the number of states and using the BIC criterion to determine the optimal number of states. ```LMest``` has an option to vary this for you, but we want to have a greater inspection of the models so we'll build models varying states from 2 -8. 
+Parameters: 
+First parameter = The response model, determining what is to be modelled. (Dairy, Meat, ReadyMeal and Confectionery responses) 
+Second parameter
+#### -- Model Selection: Number of States -- 
+When it comes to model selection, you want to chose the model which fits the data best while penalizing for unnecessary complexity. Thus, model selection is a balance between accuracy and complexity. There are 3 statistics which help us to determine how the model fits the data, the AIC, BIC, and Log Likelihood. These numbers in themselves are relatively meaningless, but we look for the lowest number for AIC and BIC, and the highest log-likelihood. This allows us to determine how the model fits. 
+
+In the below chunk, we will run a global search on a model including all predictors. We'll vary the number of states between 1 - 8 and compare the AIC, BIC, and log-likelihood for each state:
+```{r number_of_states}
+# -- Define the formula to use --
+fmLatent <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern", "Age",
+                                           "Price_Sensitivity", "Organic_Preference"),
+                         LatentTransition = c("environmental_concern", "Age", 
+                                              "Price_Sensitivity", "Organic_Preference"))
+
+# -- Get the response formula -- 
+responsesFormula = fmLatent$responsesFormula
+
+# -- Conduct global search -- 
+# Explore the log-likelihood, AIC and BIC from 1: 8 states
+model <- lmestSearch(responsesFormula =  responsesFormula, 
+                       index = c("id","time"),
+                       version ="categorical",
+                       data = data, k = 1:8,
+                       modBasic = 1, seed = 001) # modBasic = time homogeneity 
+
+summary(model)
+plot(model$lkv)
+plot(model$Bic)
+
+# Plot BIC
+bic <- data.frame(model$Bic)
+aic <- data.frame(model$Aic)
+number_of_states <- c(1, 2, 3, 4, 5, 6, 7, 8)
+bic_plot <- cbind(bic, number_of_states, aic)
+
+ggplot(bic_plot, aes(x=number_of_states)) + 
+  geom_line(aes(y = model.Bic), color = "#9AC791") + 
+  geom_line(aes(y = model.Aic), color=#9C92B0, linetype="twodash") +
+  theme_classic() + 
+  labs(title = "AIC and BIC Values by Number of States", 
+       x = "Number of States", y = "Model Criterion (BIC/ AIC)")
+
+
+```
+
+The BIC continues to fall while the log-likelihood continues to rise as more states are added, however the difference becomes negligible in comparison to the complexity added to the model. We can get a better overview of these below: 
+```{r difference_in_BIC}
+# Can calculate the differences 
+bic_differences <- data.frame(model$Bic)
+difference <- diff(bic_differences$model.Bic)
+difference <- c(NA, difference)
+bic_differences$difference <- difference
+
+# as percentage 
+bic_differences <- bic_differences %>% 
+  mutate(percent = (difference / model.Bic)*100)
+bic_differences$percent <- round(bic_differences$percent, digit = 2)
+
+print(bic_differences)
+```
+
+Thus, we can say that the optimal number of states for the model will be 4 or 5. We'll select 5 states to continue with our model. 
+
+```{r}
+install.packages("ggpubr")
+library(ggpubr)
+
+cor.test(data$Age, data$environmental_concern)
+```
+
+
+#### -- Model Selection: Covariates -- 
+We can now estimate a hidden markov model with covariates affecting the distribution of the latent process, by fixing the number of states (k = 5). We're looking for covariates which can explain state ownership well, so we'll look to see how they vary for each state across the a covariates and how adding each affects the model: 
+
+In the below section, we'll build and run models varying the covariates used to calculate the initial and transition probabilities. We'll explore the below X models and use the BIC as criterion to determine whether the predictor improves the model: 
+
+```{r covariates_alone}
+# -- Define the formulas -- 
+fmBasic <- lmestFormula(data = data, response = "y") 
+
+fmModel1 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern"),
+                         LatentTransition = c("environmental_concern"))
+
+fmModel2 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("Age"),
+                         LatentTransition = c("Age"))
+
+fmModel3 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("Price_Sensitivity"),
+                         LatentTransition = c("Price_Sensitivity"))
+
+fmModel4 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("Organic_Preference"),
+                         LatentTransition = c("Organic_Preference"))
+
+fmModelAll <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern", "Age", 
+                                           "Organic_Preference",
+                                           "Price_Sensitivity"),
+                         LatentTransition = c("environmental_concern", "Age", 
+                                           "Organic_Preference",
+                                           "Price_Sensitivity"))
+
+# -- Run model and compare -- 
+model_All <- lmest(responsesFormula = fmModelAll$responsesFormula,
+             latentFormula =  fmModelAll$latentFormula,
+             index = c("id","time"),
+             data = data, k = 5,
+             paramLatent = "multilogit",
+             start = 0, out_se=TRUE) 
+
+model_test$Bic
+
+# -- BIC Results -- 
+# Basic = 30843.58
+# Model 1 = 30680.54 (environment = improves model)
+# Model 2 = 30636.2 (age = improves model)
+# Model 3 = 30964.17 (price_sensitivity = does not improve model)
+# Model 4 = 30921.7 (organic_preference = does not improve model)
+
+# clean up environment 
+rm(fmModel3)
+```
+
+Having determined that both environmental concern and age improve our model, while price sensitivity and organic preference make it worse, we'll drop the latter two and consider whether our model is better using the two predictors together or not: 
+```{r covariates_combined}
+# Model 5 
+fmModel5 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern", "Age"),
+                         LatentTransition = c("environmental_concern", "Age"))
+
+# -- Run model and compare -- 
+model_5 <- lmest(responsesFormula = fmModel5$responsesFormula,
+             latentFormula =  fmModel5$latentFormula,
+             index = c("id","time"),
+             data = data, k = 5,
+             paramLatent = "multilogit",
+             start = 0, out_se=TRUE) 
+
+# -- Results -- 
+model_5$Bic # 30780.65  (both predictors together make the model better than basic)
+
+# Finally we'll see if it is worth using the covariates as predictors on the transition probabilities also, or just the initial probabilities 
+
+# Model 6 
+fmModel6 <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern", "Age"))
+
+model_6 <- lmest(responsesFormula = fmModel6$responsesFormula,
+             latentFormula =  fmModel6$latentFormula,
+             index = c("id","time"),
+             data = data, k = 5,
+             paramLatent = "multilogit",
+             start = 0, out_se=TRUE) 
+
+# -- Results -- 
+model_6$Bic # Excluding the transition probabilities makes the model worse
+```
+
+The above explorations tell us that 'Age' and 'Environmental Concern' are good predictors for our model, while 'Organic Preference' and 'Price Sensitivity' are not. Taken alone, the predictors perform a little better than when used together, however this difference is not overly significant, performs better than the basic model, and gives us greater explanatory power. Thus, the 2 predictors are included in the model to give us better understanding of our consumer states. Further, the transition probabilities benefit by being modelled using the predictors, so these will also be included within the model. 
+
+Thus, our final model is outlined below: 
+```{r final_model}
+# -- Define formula -- 
+fmLatent <- lmestFormula(data = data, response = "y",
+                         LatentInitial = c("environmental_concern", "Age"),
+                         LatentTransition = c("environmental_concern", "Age"))
+
+# -- Assign variables -- 
+responsesFormula = fmLatent$responsesFormula
+latentFormula = fmLatent$latentFormula
+
+# -- Run model -- 
+final_model <-lmest(responsesFormula = responsesFormula,
+                    latentFormula =  latentFormula,
+                    index = c("id","time"),       # modelling per household per time
+                    data = data, k = 5,           # 5 states 
+                    paramLatent = "multilogit",   # standard multinomial logit
+                    start = 0, out_se=TRUE,       # initial probabilities = deterministic 
+                    seed = 001) 
+
+# Check model 
+final_model$Bic
+```
+
+#### -- Analyse results -- 
+```{r}
+# -- Inspect results -- 
+summary(final_model)
+
+# -- Standard error within Model -- 
+mean(final_model$sePsi) #se of responses = 0.02
+final_model$seBe # standard error of initial probabilities = 0.18 
+
+```
+
+
+```{r initial_state_probabilities}
+# Initial probability matrix
+final_model$Piv
+
+# Create dataframe of state membership initial probabilities 
+initial_probabilities <- data.frame(final_model$Piv)
+initial_probabilities <- initial_probabilities %>% 
+  rename(State_1 = 1,
+         State_2 = 2, 
+         State_3 = 3, 
+         State_4 = 4, 
+         State_5 = 5)
+
+# Save dataframe of initial probabilities 
+write.csv(initial_probabilities, "data/model_results/initial_probabilities.csv")
+
+# Determine the initial state membership distribution 
+state_membership <- initial_probabilities %>% 
+  mutate(membership_S1 = mean(initial_probabilities$State_1), 
+         membership_S2 = mean(initial_probabilities$State_2), 
+         membership_S3 = mean(initial_probabilities$State_3), 
+         membership_S4 = mean(initial_probabilities$State_4), 
+         membership_S5 = mean(initial_probabilities$State_5))
+
+state_membership <- state_membership %>% select(6:10) # keep only the summary columns 
+state_membership <- state_membership %>% distinct() # keep only one row 
+state_membership <- round(state_membership, digit = 2) # round to 2 decimal places 
+
+```
+
+```{r Transition_matrix}
+# Inspect 
+final_model$PI
+
+# This prints the transition probability per household per timepoint per state 
+# i.e. (1019 * 8 * 5 ) = 40760 
+
+# It is much easier to see plotted 
+plot(final_model, what = "transitions")
+
+# We'll plot how people change class over time 
+plot(final_model, what="marginal")
+
+```
+
+
+#### Clean up environment 
+```{r}
+rm(fmBasic, fmModel1, fmModel2, fmModel3, fmModel4, fmModel5, fmModel6)
+```
+
+
+
+#### Calculating purchasing power 
+```{r}
+# Subset important variables 
+purchasing_power <- data %>% select(1:6)
+
+# Calculate periodic 
+purchasing_power <- purchasing_power %>% group_by(Period) %>% 
+  mutate(Dairy_purchases = sum(yDairy), 
+         Meat_purchases = sum(yMeat), 
+         ReadyMeal_purchases= sum(yReadyMeal), 
+         Confect_purchases = sum(yConfectionery))
+
+
+purchasing_power <- purchasing_power %>% distinct(Period, .keep_all = T)
+
+# Calculate percentage 
+purchasing_power$Dairy_purchases <- purchasing_power$Dairy_purchases / 1019
+purchasing_power$Meat_purchases <- purchasing_power$Meat_purchases / 1019
+purchasing_power$ReadyMeal_purchases <- purchasing_power$ReadyMeal_purchases / 1019
+purchasing_power$Confect_purchases <- purchasing_power$Confect_purchases / 1019
+
+#Buying stability 
+buying_stability <- data %>% select(1:6)
+
+buying_stability <- buying_stability %>% group_by(id) %>% 
+  mutate(hh_Dairy = sum(yDairy), 
+         hh_Meat = sum(yMeat), 
+         hh_ReadyMeals = sum(yReadyMeal), 
+         hh_Confect = sum(yConfectionery))
+
+# Quick fix 
+test <- buying_stability %>% distinct(id, .keep_all = T)
+
+#A proportion 
+test <- test %>% subset(hh_Dairy > 0) # 940
+sum(test$hh_Dairy == 2)
+
+68 * 0.
+
+test <- test %>% subset(hh_Confect > 2)
+
+mean(test$hh_Confect)
+590 / 1019
+
+```
+
+
+

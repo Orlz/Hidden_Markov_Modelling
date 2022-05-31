@@ -1,0 +1,2415 @@
+---
+title: "Categorising Sales"
+author: "Orla Mallon"
+date: "21/05/2022"
+output: html_document
+---
+
+This script takes the cleaned sales and product data and classifies it into the 6 product categories of interest. These are described below: 
+
+**Dairy Alternatives** = product classified as a dairy alternative when the product being replaced is a typical dairy product (i.e., a product made from milk). This will include milk, cream, cheese, yoghurt, kefir, butter, buttermilk, koldskøl, creme fraiche, condensed milk and ice cream. 
+
+**Meat substitutes** = product classified as a meat alternative when the product being replaced is a typical meat product (i.e., made from the flesh of animals). This will include substitutes for red meat (beef, pork, and lamb), poultry (birds), and other managed species such as insects. The products will relate to a typical meat substance name such as "burger", "steak", or "nuggets". It will also include Tofu and Seitan, the two "meat-like" alternatives.
+
+**Egg Substitutes** = product classified as an egg alternative when the product being replaced is egg-based (i.e., made using the contents within the eggshell). This will include egg whites, egg yolks, powdered eggs, whole eggs, mayonnaise, and pasta. 
+
+**Fish Substitutes** = product classified as a seafood alternative when the product being replaced is a typical fish or seafood product (i.e., produced from creatures of the sea). This will include fish, shellfish, fish sauces, and fish flour etc. 
+
+**Ready Meal substitutes** = product classified as a meal substitute when it is marketed as a plant-based alternative meal, side dish, or between meal snack and not a single product imitating a meat. This will include pizzas, ready meals, sauces, vegan canned food, vegan ravioli, soup etc. 
+
+**Confectionery (incl. snacks)** = product classified as a confectionery product if the plant-based product replaces a typical treat, snack, or high sugar good such as gummies, chips, chewing gum, chocolate, muesli bars
+
+Purpose of script: 
+1. Categorise new plant-based products 
+2. Categorise the GFK products 
+3. Ensure households have purchased non-plant-based products in each timeframe 
+
+Output of script: 
+A csv file of sales and product data for each category. 
+
+## Setup 
+```{r setup}
+# -- working dircetory -- 
+setwd("~/Desktop/dev/Data_Science/")
+getwd()
+
+# -- dependencies -- 
+library(tidyverse, dplyr)
+library(rio)
+library(haven)
+library(readxl)
+library(ggplot2)
+
+# -- load data -- 
+# sales and product data 
+sales <- read.csv("data/sales_data/sales_with_product_data.csv") # 4694,331 obs of 13 V 
+
+# plant-based files 
+plant_based_data <- read_excel("data/background_data/new_plant_products.xls")
+
+# -- Visualisation theme -- 
+# devtools::install_github('Mikata-Project/ggthemr')
+#ggthemr('dust')
+# https://github.com/Mikata-Project/ggthemr
+
+```
+
+#### Placeholder dataframes 
+pb = indicates plant-based products (e.g., pb_dairy = plant_based dairy sales)
+n =  indicated non-plant-based products (e.g., n_dairy = traditional dairy proucts)
+```{r dataframes}
+# -- Plant-based Products -- 
+pb_dairy <- data.frame()
+pb_meat <- data.frame()
+pb_eggs <- data.frame()
+pb_seafood <- data.frame()
+pb_readymeals <- data.frame()
+pb_confectionery <- data.frame() 
+
+# -- Non Plant-based Products -- 
+n_dairy <- data.frame()
+n_meat <- data.frame()
+n_eggs <-data.frame() 
+```
+
+#### Functions 
+```{r functions}
+# -- Function to count purchases by household in a dataframe -- 
+count_purchases <- function(df) { 
+  counted_data <- df %>% group_by(hhnr) %>% 
+    mutate(purchases = n()) %>% 
+    distinct(hhnr, .keep_all = T) %>% 
+    select(hhnr, purchases)
+  return(counted_data)
+}
+
+```
+
+
+
+# Part 1: Categorising new-plant products 
+Below, we take the new plant-based products catalog and extract the new products per category. As we are working with the categories defined above, we will need to re-categorise these into the 6 groups of dairy, meat, eggs, seafood, ready-meals, and confectionery substitutes.
+
+#### Ensure you are only capturing plant-based products within timeframe 
+We want to capture all plant-based products, no matter when they were released as long as it not after 31st December 2021. The earliest date recorded is October 1997 and the latest is May 2022. Therefore we'll cut our data to stop after 31st December 2021:
+```{r new_product_dates}
+# Chop to include only products realeased before 2022  
+plant_based_data <- plant_based_data[plant_based_data$`Date Published` < "2021-12-31", ] # 582
+```
+
+Next, we want to get an overview of how plant-based products have been released: 
+```{r get_category_overview}
+# -- Get a counted list of plant-based food product categories -- 
+categories <- plant_based_data %>% select(Category) %>% group_by(Category) %>% 
+  mutate(category_count = n()) %>% unique(keep.all = T)
+
+# -- sort the categories -- 
+categories <- categories[order(-categories$category_count),] 
+
+# -- print top 8 categories -- 
+head(categories, 8) # dairy has the most new products released. 
+write.csv(categories, "data/background_data/new_products_by_category.csv")
+
+# -- Create overview of this release of products year by year -- 
+# create a year column 
+plant_based_data$Year <- format(plant_based_data$`Date Published`, format ="%Y")
+
+plant_based_data %>% group_by(Year) %>% 
+  ggplot(aes(x = Year), fill = Year) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Release of New Plant-Based Products per Year") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14))
+```
+
+#### Setup the 6 category dataframes 
+```{r}
+new_pb_dairy         <- data_frame()
+new_pb_meat          <- data_frame()
+new_pb_eggs          <- data_frame()
+new_pb_seafood       <- data_frame()
+new_pb_ready_meals   <- data_frame()
+new_pb_confectionery <- data_frame()
+
+# create a dataframe to keep extracting categoised products from 
+pb_to_categorise <- plant_based_data # 582 obs 
+```
+
+## Excluding some redundent categories 
+Fruit & Vegetables = these are organic products but not alternatives 
+Spice_mix = seasoning and not alternative
+oils = naturally plant-based so not an alternative 
+hummus = not typically made with non-plant-based products 
+falafel = not typically made with non-plant-based products
+juice = not typically made with non-plant-based products
+water = not typically made with non-plant-based products 
+tea = not typically made with non-plant-based products 
+gum = not typically made with non-plant-based products
+energy_drink = not typically made with non-plant-based products
+```{r exclude_redundent_catgories}
+# -- exclude irrelevant category's -- 
+f_and_v <- plant_based_data %>% subset(Category == "Fruit & Vegetables") # 6 obs 
+celeriac <- plant_based_data[grep("Celeriac", plant_based_data$Product), ] # 1 obs 
+spice_mix <- plant_based_data[grep("Spice Mix", plant_based_data$Product), ] # 5 obs 
+oils <- plant_based_data[grep("Coconut Oil", plant_based_data$Product), ] # 2 obs 
+hummus <- plant_based_data[grep("Hummus", plant_based_data$Product), ] # 6 obs
+falafel <- plant_based_data[grep("Falafel", plant_based_data$Product), ] # 6 obs 
+juice <- plant_based_data[grep("Juice", plant_based_data$Product), ] # 3 obs 
+water <- plant_based_data[grep("Water", plant_based_data$Product), ] # 4 obs 
+tea <- plant_based_data[grep("Tea", plant_based_data$Product), ] # 4 obs
+cranberries <- plant_based_data[grep("Dried Cranberries", plant_based_data$Product), ] # 1 obs 
+baked_beans <- plant_based_data[grep("Baked Beans", plant_based_data$Product), ] # 1 obs 
+energy_drink <- plant_based_data[grep("Energy Drink", plant_based_data$Product), ] # 4 obs
+
+# -- add together into one -- 
+irrelevant_products <- rbind(f_and_v, celeriac, spice_mix, oils, hummus, falafel, juice,
+                             water,tea, cranberries, baked_beans, energy_drink) # 43 obs
+
+# -- remove from pb_to_categoise -- 
+pb_to_categorise <- anti_join(pb_to_categorise, irrelevant_products) # 542 obs 
+
+# -- remove dataframes -- 
+rm(f_and_v, celeriac, spice_mix, oils, hummus, juice, water, tea, cranberries, falafel,
+   baked_beans, energy_drink)
+
+```
+
+#### Dairy 
+```{r new_pb_dairy}
+# -- Dairy -- 
+dairy <- plant_based_data %>% subset(Category == "Dairy") # 216 obs
+
+# -- Search for other common products -- 
+#By product category: 
+dairy_alternatives <- pb_to_categorise %>% 
+  subset(`Sub-Category` == "Plant Based Ice Cream & Frozen Yogurt (Dairy Alternatives)") # 65 
+
+# By product name: 
+milk <- pb_to_categorise[grep("Milk", pb_to_categorise$Product), ] # 17 obs 
+cream <- pb_to_categorise[grep("Cream", pb_to_categorise$Product), ] # 81 (incl ice cream)
+cheese <- pb_to_categorise[grep("Cheese", pb_to_categorise$Product), ] # 6 obs 
+yogurt <- pb_to_categorise[grep("Yogurt", pb_to_categorise$Product), ] # 22 obs 
+yoghurt <- pb_to_categorise[grep("Yoghurt", pb_to_categorise$Product), ] # 4 obs 
+kefir <- pb_to_categorise[grep("Kefir", pb_to_categorise$Product), ]  # 0 obs 
+butter <- pb_to_categorise[grep("Butter", pb_to_categorise$Product), ]# 5 obs
+butter_milk <- pb_to_categorise[grep("Kærnemælk", pb_to_categorise$Product), ] # 0 obs 
+koldskøl <- pb_to_categorise[grep("Koldskøl", pb_to_categorise$Product), ] # 0 
+creme_fraice <- pb_to_categorise[grep("Créme", pb_to_categorise$Product), ] # 1 obs
+condensed_milk <- pb_to_categorise[grep("Kondenseret mælk", pb_to_categorise$Product), ] # 0obs
+smoothie <- pb_to_categorise[grep("Smoothie", pb_to_categorise$Product), ] # 2 obs 
+latte <- pb_to_categorise[grep("Latte", pb_to_categorise$Product), ] # 6 obs
+spread <- pb_to_categorise[grep("Spread", pb_to_categorise$Product), ] # 10 obs 
+
+# Combine together 
+dairy_products <- rbind(dairy, dairy_alternatives, milk, cream, cheese, yogurt, yoghurt, 
+                        kefir, butter, butter_milk, koldskøl, creme_fraice, condensed_milk,
+                        smoothie, latte, spread) # 435 obs 
+
+# add to new_pb_dairy 
+new_pb_dairy <- rbind(new_pb_dairy, dairy_products) # 435 obs 
+
+# Delete duplicates 
+new_pb_dairy  <- new_pb_dairy  %>% distinct() # 315 obs 
+
+# Delete these from pb_to_categorise
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_dairy) # 228 obs 
+
+# clean up environment 
+rm(dairy, dairy_alternatives, milk, cream, cheese, yogurt, yoghurt, kefir, butter, 
+  butter_milk, koldskøl, creme_fraice, condensed_milk, smoothie, latte, spread, dairy_products)
+
+```
+
+#### Meat 
+```{r new_pb_meat}
+# -- Meat substitutes -- 
+meat <- plant_based_data %>% subset(Category == "Processed Fish, Meat & Egg Products") # 100
+
+# -- Split away Eggs -- 
+eggs <- meat[grep("Egg", meat$Product), ] # 2 obs 
+# remove eggs from meat substitutes 
+meat <- anti_join(meat, eggs) # 98 obs 
+
+# -- Split away Seafood -- 
+seafood <- meat[grep("fish", meat$Product),] # 0 obs
+seafood <- meat[grep("Fingers", meat$Product),] # 1 obs (alternative to fish fingers) 
+naturli_fish <- meat[grep("Fishy", meat$Product),] # 2 obs 
+seafood <- rbind(seafood, naturli_fish)
+# split away from meat 
+meat <- anti_join(meat, seafood) # 95 obs 
+
+# -- Add to the cateogry dataframes -- 
+new_pb_eggs <- eggs 
+new_pb_seafood <- seafood 
+
+rm(seafood, naturli_fish, eggs)
+
+# -- Search for other common products -- 
+#By product name: 
+beef <- pb_to_categorise[grep("Beef", pb_to_categorise$Product), ] # 1 obs 
+bof <- pb_to_categorise[grep("Bøf", pb_to_categorise$Product), ] # 0 obs 
+oksekød <- pb_to_categorise[grep("Oksekød", pb_to_categorise$Product), ] # 0 obs 
+pork <- pb_to_categorise[grep("Pork", pb_to_categorise$Product), ] # 0 obs 
+svinekød <- pb_to_categorise[grep("Svinekød", pb_to_categorise$Product), ] # 0 obs 
+lamb <- pb_to_categorise[grep("Lamb", pb_to_categorise$Product), ] # 0 obs 
+lam <- pb_to_categorise[grep("Lam", pb_to_categorise$Product), ] # 0 obs 
+chicken <- pb_to_categorise[grep("Chicken", pb_to_categorise$Product), ] # 5 obs 
+kylling <- pb_to_categorise[grep("Kylling", pb_to_categorise$Product), ] # 0 obs 
+burgers <- pb_to_categorise[grep("Burger", pb_to_categorise$Product), ] # 19 obs 
+sausages <- pb_to_categorise[grep("Sausage", pb_to_categorise$Product), ] # 14 obs 
+pate <- pb_to_categorise[grep("Paté", pb_to_categorise$Product), ] # 5 obs 
+pate_2 <- pb_to_categorise[grep("Pate", pb_to_categorise$Product), ] # 1 obs 
+stock <- pb_to_categorise[grep("Stock", pb_to_categorise$Product), ] # 1 obs 
+boullion <- pb_to_categorise[grep("Boullion", pb_to_categorise$Product), ] # 0 obs 
+meatballs <- pb_to_categorise[grep("Balls", pb_to_categorise$Product), ] # 1 obs 
+
+# Add together 
+meat_products <- rbind(meat, beef, bof, oksekød, pork, svinekød, lamb, lam, chicken, kylling,
+                       burgers, sausages, pate, pate_2, stock, boullion, meatballs) # 145 obs 
+
+# Delete duplicates 
+meat_products <- meat_products %>% distinct() # 108 obs 
+
+# Add to new_pb_meat 
+new_pb_meat <- rbind(new_pb_meat, meat_products)
+
+# remove from pb_to_categorise 
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_meat) # 121 obs 
+
+# clean up environment 
+rm(meat, beef, bof, oksekød, pork, svinekød, lamb, lam, chicken, kylling, burgers, 
+   sausages,pate, pate_2, stock, boullion, meatballs, meat_products)
+
+```
+
+## Eggs 
+** Note: The base category has been pulled from meat. 
+```{r new_pb_eggs}
+# -- Search for common products -- 
+eggs <- pb_to_categorise[grep("Egg", pb_to_categorise$Product), ] #2 incl(whites & powdered)
+yolk <- pb_to_categorise[grep("Yolk", pb_to_categorise$Product), ] # 0 obs 
+pasta <- pb_to_categorise[grep("Pasta", pb_to_categorise$Product), ] # 2 obs 
+fettuccine <- pb_to_categorise[grep("Fettuccine", pb_to_categorise$Product), ] # 3 obs 
+gnocchi <- pb_to_categorise[grep("Gnocchi", pb_to_categorise$Product), ] # 1 obs 
+remoulade <- pb_to_categorise[grep("Remoulade", pb_to_categorise$Product), ] # 2 obs 
+bearnaise <- pb_to_categorise[grep("Bearnaise", pb_to_categorise$Product), ] # 1 obs 
+aioli <- pb_to_categorise[grep("Aioli", pb_to_categorise$Product), ] #1ob
+mayonnaise <- pb_to_categorise[grep("Mayonnaise", pb_to_categorise$Product), ] #1ob
+
+# add together 
+egg_products <- rbind(eggs, yolk, pasta, fettuccine, gnocchi, remoulade, bearnaise,
+                      aioli, mayonnaise) # 13 obs 
+
+# add to the new_pb_eggs
+new_pb_eggs <- rbind(new_pb_eggs, egg_products)
+
+# Delete duplicates 
+new_pb_eggs <- new_pb_eggs %>% distinct() # 13 obs 
+
+# remove egg products from main dataframe 
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_eggs) # 108 obs 
+
+# clean up environment
+rm(eggs, yolk, pasta, fettuccine, gnocchi, remoulade, bearnaise,
+                      aioli, mayonnaise, egg_products)
+
+```
+
+## Seafood 
+```{r new_pb_seafood}
+# -- Search for other common products -- 
+fish <- pb_to_categorise[grep("Fish", pb_to_categorise$Product), ] #0 (incl shellfish)
+squid <- pb_to_categorise[grep("Squid", pb_to_categorise$Product), ] # 0 obs 
+mackerel <- pb_to_categorise[grep("Mackerel", pb_to_categorise$Product), ] # 1 ob 
+tuna <-  pb_to_categorise[grep("Tuna", pb_to_categorise$Product), ] #1 ob 
+herring <- pb_to_categorise[grep("Herring", pb_to_categorise$Product), ] # 0 obs 
+fish_sauce <- pb_to_categorise[grep("Fish Sauce", pb_to_categorise$Product), ] # 0 obs 
+
+# add together 
+seafood_products <- rbind(fish, squid, mackerel, tuna, herring, fish_sauce) # 2 obs 
+
+# bind to new_pb_seafood 
+new_pb_seafood <- rbind(new_pb_seafood, seafood_products) # 5 obs 
+
+# Delete duplicates 
+new_pb_seafood <- new_pb_seafood %>% distinct() # 5 obs 
+
+# remove from main dataframe 
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_seafood) # 105 obs 
+
+# clean up environment 
+rm(fish, squid, mackerel, tuna, herring, fish_sauce, seafood_products)
+
+```
+
+### Ready Meals 
+```{r new_pb_ready_meals}
+# Search by category 
+meals <- pb_to_categorise %>% subset(Category == "Meals & Meal Centers") # 32 obs 
+
+# Search by product 
+quinoa <- pb_to_categorise[grep("Quinoa Balls", pb_to_categorise$Product), ] # 0 obs 
+massala <- pb_to_categorise[grep("Tikka Masala", pb_to_categorise$Product), ] # 4 obs 
+stew <- pb_to_categorise[grep("Stew", pb_to_categorise$Product), ] # 4 obs 
+pesto <- pb_to_categorise[grep("Pesto", pb_to_categorise$Product), ] # 2 obs
+potato_salad <- pb_to_categorise[grep("Potato Salad", pb_to_categorise$Product), ] #2 obs
+mash <- pb_to_categorise[grep("Mashed Potatoes", pb_to_categorise$Product), ] # 1 obs 
+breakfast_pot <- pb_to_categorise[grep("Porridge Pot", pb_to_categorise$Product), ] # 2 obs 
+porridge <- pb_to_categorise[grep("Porridge", pb_to_categorise$Product), ] # 11 obs 
+stroganoff <- pb_to_categorise[grep("Stroganoff", pb_to_categorise$Product), ] # 3 obs 
+bolognese <- pb_to_categorise[grep("Bolognese", pb_to_categorise$Product), ]# 4 obs 
+curry <- pb_to_categorise[grep("Curry", pb_to_categorise$Product), ] # 4 obs
+meal <- pb_to_categorise[grep("Meal", pb_to_categorise$Product), ] #5 obs 
+Bibimbap <- pb_to_categorise[grep("Bibimbap", pb_to_categorise$Product), ]# 1 obs 
+ravioli <- pb_to_categorise[grep("Ravioli", pb_to_categorise$Product), ] # 1 obs
+soup <- pb_to_categorise[grep("Soup", pb_to_categorise$Product), ] # 3 obs 
+
+# add together 
+meal_products <- rbind(meals, quinoa, massala, stew, pesto, potato_salad, mash, breakfast_pot,
+                       porridge, stroganoff, bolognese, curry, meal, Bibimbap, ravioli, soup)
+
+# add to pb_new_ready_meals 
+new_pb_ready_meals <- rbind(new_pb_ready_meals, meal_products) # 79 obs 
+
+# Delete duplicates 
+new_pb_ready_meals <- new_pb_ready_meals %>% distinct() # 56 obs 
+
+# Remove from pb_to_categorise 
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_ready_meals) # 49 obs 
+
+# clean up environment 
+rm(meals, quinoa, massala, stew, pesto, potato_salad, mash, breakfast_pot,porridge, 
+   stroganoff, bolognese, curry, meal, Bibimbap, ravioli, soup, meal_products)
+
+
+```
+
+## Confectionary:
+```{r new_pb_confectionery}
+# -- Search by category -- 
+sugar_products <- pb_to_categorise %>% subset(Category == "Sugar & Gum Confectionery") # 5 obs 
+chocolate <- pb_to_categorise %>% subset(Category == "Chocolate Confectionery") # 4 obs 
+snacks <- pb_to_categorise %>% subset(Category == "Snacks") # 16 obs 
+desserts <- pb_to_categorise %>% subset(Category == "Desserts & Ice Cream") # 6 obs 
+baked_goods <- pb_to_categorise %>% subset(Category == "Bakery")
+
+# remove irrelevant products from baked_goods 
+not_relevant <- baked_goods[grep("Original Soft Tortilla", baked_goods$Product), ] # 1 obs 
+baked_goods <- anti_join(baked_goods, not_relevant) # 9 obs 
+irrelevant_products <- rbind(irrelevant_products, not_relevant) # 44 obs 
+
+# add together 
+confectionery <- rbind(sugar_products, chocolate, snacks, desserts, baked_goods)
+
+# add to new_pb_confectionery 
+new_pb_confectionery <- rbind(new_pb_confectionery, confectionery) # 40 obs 
+
+# remove from pb_to_categorise 
+pb_to_categorise <- anti_join(pb_to_categorise, new_pb_confectionery) # 9 obs 
+
+# clean up environment 
+rm(sugar_products, chocolate, snacks, desserts, baked_goods, confectionery, not_relevant)
+
+```
+
+#### Check the remaining products don't fit into any categories 
+```{r check_remaining}
+# -- view remaining products -- 
+table(pb_to_categorise$Product)
+
+# we can assign the almond protein shakes to dairy as it is an alternative to milk 
+shakes <- pb_to_categorise[grep("Shake", pb_to_categorise$Product),] #2 obs 
+new_pb_dairy <- rbind(new_pb_dairy, shakes) # 317 obs
+pb_to_categorise <- anti_join(pb_to_categorise, shakes) # 7 obs 
+
+# The rest of the products can be added to the irrelevant_products dataframe as they do not meet the inclusion criteria: 
+irrelevant_products <- rbind(irrelevant_products, pb_to_categorise) # 51 obs 
+
+# clean up environment
+rm(shakes, pb_to_categorise)
+```
+
+### Save new product lists 
+```{r save_new_product_lists}
+# -- Add a column to each list to indicate which category it belongs to -- 
+new_pb_dairy$HMM_Category <- "Dairy Alternative"
+new_pb_meat$HMM_Category <- "Meat Substitute"
+new_pb_eggs$HMM_Category <- "Egg Substitute"
+new_pb_seafood$HMM_Category <- "Seafood Substitute"
+new_pb_ready_meals$HMM_Category <- "Meal Substitute"
+new_pb_confectionery$HMM_Category <- "Confectionery Substitute"
+
+# -- Cut the data to include only columns of interest -- 
+new_pb_dairy <- new_pb_dairy %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+new_pb_meat <- new_pb_meat %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+new_pb_eggs <- new_pb_eggs %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+new_pb_seafood <- new_pb_seafood %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+new_pb_ready_meals <- new_pb_ready_meals %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+new_pb_confectionery <- new_pb_confectionery %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year, HMM_Category)
+
+
+irrelevant_products <- irrelevant_products %>% 
+  select(`Bar Code`, Product, `Product Variant`, Brand, Company, `Date Published`, 
+         Category, `Sub-Category`,Year)
+
+# -- Save each list individually -- 
+write.csv(new_pb_dairy, 
+          "data/product_data/new_product_data/new_products_lists/new_dairy_products.csv", 
+          row.names = FALSE)
+write.csv(new_pb_meat, 
+          "data/product_data/new_product_data/new_products_lists/new_meat_products.csv", 
+          row.names = FALSE)
+write.csv(new_pb_eggs, 
+          "data/product_data/new_product_data/new_products_lists/new_egg_products.csv", 
+          row.names = FALSE)
+write.csv(new_pb_seafood, 
+          "data/product_data/new_product_data/new_products_lists/new_seafood_products.csv", 
+          row.names = FALSE)
+write.csv(new_pb_ready_meals, 
+          "data/product_data/new_product_data/new_products_lists/new_readymeals_products.csv", 
+          row.names = FALSE)
+write.csv(new_pb_confectionery, 
+        "data/product_data/new_product_data/new_products_lists/new_confectionery_products.csv",
+          row.names = FALSE)
+write.csv(irrelevant_products,
+          "data/product_data/new_product_data/new_products_lists/excluded_products.csv", 
+          row.names = FALSE)
+
+# -- Combine products into one file -- 
+all_new_products <- rbind(new_pb_dairy, new_pb_meat, new_pb_eggs, new_pb_seafood, 
+                          new_pb_ready_meals, new_pb_confectionery)
+
+# save 
+write.csv(all_new_products, "data/product_data/new_product_data/new_products_lists/all_new_products.csv")
+
+```
+
+## Plot the category membership of new products 
+```{r}
+# Create shorter column names 
+all_new_products$Category_short <- "Dairy" # assign placeholder of largest category 
+all_new_products$Category_short[all_new_products$HMM_Category == "Meat Substitute"] <- "Meat"
+all_new_products$Category_short[all_new_products$HMM_Category == "Egg Substitute"] <- "Eggs"
+all_new_products$Category_short[all_new_products$HMM_Category == "Seafood Substitute"] <- "Seafood"
+all_new_products$Category_short[all_new_products$HMM_Category == "Meal Substitute"] <- "Ready Meal"
+all_new_products$Category_short[all_new_products$HMM_Category == "Confectionery Substitute"] <- "Snacks"
+
+
+all_new_products %>% group_by(Category_short) %>% 
+  ggplot(aes(x = Category_short, fill = Category_short)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Release of New Plant-Based Products by Category", 
+       x = "Category", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+
+```
+
+### Match the sales data to the new Product categories
+With the products categorized, we can find the sales of these new plant-based products in our sales data and add it to our overarching 'pb' data frames: 
+```{r match_sales_product_data}
+# -- Check column classes -- 
+class(sales_data$eankode) # factor 
+
+# convert new_pb data frames 'Record ID' column to a factor 
+class(new_pb_dairy$`Bar Code`) # original is a 'character'
+new_pb_dairy$`Record ID` <- as.factor(new_pb_dairy$`Bar Code`)
+new_pb_meat$`Record ID` <- as.factor(new_pb_meat$`Bar Code`)
+new_pb_eggs$`Record ID` <- as.factor(new_pb_eggs$`Bar Code`)
+new_pb_seafood$`Record ID` <- as.factor(new_pb_seafood$`Bar Code`)
+new_pb_ready_meals$`Record ID` <- as.factor(new_pb_ready_meals$`Bar Code`)
+new_pb_confectionery$`Record ID` <- as.factor(new_pb_confectionery$`Bar Code`)
+class(new_pb_dairy$`Bar Code`)
+
+# -- look for sales -- 
+pb_dairy <- sales_data[sales_data$eankode %in% new_pb_dairy$`Bar Code`, ] # 11,025 
+pb_meat <- sales_data[sales_data$eankode %in% new_pb_meat$`Bar Code`, ] # 735 obs 
+pb_eggs <- sales_data[sales_data$eankode %in% new_pb_eggs$`Bar Code`, ] # 16 obs 
+pb_seafood <- sales_data[sales_data$eankode %in% new_pb_seafood$`Bar Code`, ] # 0 obs 
+pb_readymeals <- sales_data[sales_data$eankode %in% new_pb_ready_meals$`Bar Code`, ] # 18 obs
+pb_confectionery <- sales_data[sales_data$eankode %in% new_pb_confectionery$`Bar Code`, ] # 31 
+
+# check the numbers 
+sale_check <- sales_data[sales_data$eankode %in% all_new_products$`Bar Code`, ]
+
+# -- Save the new product plant based sales -- 
+write.csv(pb_dairy, "data/product_data/new_product_data/new_product_sales/new_dairy_sales.csv")
+write.csv(pb_meat, "data/product_data/new_product_data/new_product_sales/new_meat_sales.csv")
+write.csv(pb_eggs, "data/product_data/new_product_data/new_product_sales/new_eggs_sales.csv")
+write.csv(pb_seafood, 
+          "data/product_data/new_product_data/new_product_sales/new_seafood_sales.csv")
+write.csv(pb_readymeals, 
+          "data/product_data/new_product_data/new_product_sales/new_meals_sales.csv")
+write.csv(pb_confectionery, 
+          "data/product_data/new_product_data/new_product_sales/new_confectionery_sales.csv")
+```
+
+
+
+# Part 2: Find plant based products within GFK Data 
+The GFK data is categorized using a different category scheme and spans both food and non-food products. The 'Consumer_Product_Categories.pdf' file can be used to get a better overview of this data. 
+
+We'll use these product categories along with grep() searches to try to split the sales_data into plant-based (incl the 6 categories within this) and non-plant-based (with dairy and meat products in particular).  
+
+Check the gfk categories: 
+```{r gfk_categories}
+# get a list of the gfk_categories 
+gfk_categories <- sales_data %>% group_by(PgText) %>% distinct(PgText)
+```
+
+## Dairy Products 
+Dairy product categories = 005 (Dessert Cheese), 107 (Cream), 022 (Ice Cream), 007 (Milk), 002 (Margerine), 013 (Dairy Snacks), 001 (Butter), 008 (Sour Milk Products) 
+
+```{r gfk_butter}
+# -- Butter -- 
+butter_category <- sales_data %>% subset(PgText == "Smør og Blandingsprodukter (001)") #74 k 
+butter_category_unique <- butter_category %>% distinct(ArticleText, .keep_all = T) # 136 
+
+# plant based 
+naturli_butter <- butter_category[grep("Naturli", butter_category$ArticleText), ] # 1647 
+urtekram_alternative <- sales_data[grep("Græskarfrø Smør", sales_data$ArticleText),]
+
+# Split plant_based away from butter category 
+butter_category <- anti_join(butter_category, naturli_butter) #72830 
+
+# assign to correct data frames 
+pb_dairy <- rbind(pb_dairy, naturli_butter) # 12,672obs 
+pb_dairy <- rbind(pb_dairy, urtekram_alternative) # 12,678 
+n_dairy <- rbind(n_dairy, butter_category) # 72830 obs 
+
+# clean environment 
+rm(butter_category, butter_category_unique, naturli_butter, urtekram_alternative)
+```
+
+```{r gfk_cheese}
+# -- Cheese -- 
+cheese_category <- sales_data %>% subset(ProductGroupCode == 5) # special cheese: 107969 
+cheese_category2 <- sales_data %>% subset(PgText == "Ost i skiver/stk (033)") # 122,564
+
+# add cheese categories 
+cheese_category <- rbind(cheese_category, cheese_category2) %>% distinct() #230k
+cheese_unique <- cheese_category %>% distinct(ArticleText, .keep_all = T) # 1942
+
+# plant based 
+plant_cheese <- cheese_category[grep("Plant", cheese_category$ArticleText), ] # 0 obs  
+vegan_ost <- cheese_category[grep("Vegan", cheese_category$ArticleText), ] # 1 obs
+vio_life <- cheese_category[grep("Violife", cheese_category$ArticleText), ] # 306 obs 
+
+# add together
+plant_cheese <- rbind(vegan_ost, vio_life)
+
+# split from non-plant-based cheese 
+non_plant_cheese <- anti_join(cheese_category, plant_cheese) #230k
+
+# assign to datarframes 
+pb_dairy <- rbind(pb_dairy, plant_cheese) # 12,985
+n_dairy <- rbind(n_dairy, non_plant_cheese) # 303,056 obs
+
+# clean environment 
+rm(cheese_category, cheese_category2, cheese_unique, vegan_ost, vio_life, plant_cheese, 
+   non_plant_cheese)
+```
+
+```{r gfk_cream}
+# -- Cream (107) -- 
+cream_category <- sales_data %>% subset(PgText == "Fløde (107)") # 71,427 obs 
+cream_category_unique <- cream_category %>% distinct(ArticleText, .keep_all = T) # 110 obs 
+
+# plant based cream 
+soya <- cream_category[grep("Soya", cream_category$ArticleText), ] # 493 obs 
+oat <- cream_category[grep("Oat", cream_category$ArticleText), ] # 20 obs 
+almond <- cream_category[grep("Mandel", cream_category$ArticleText), ] # 1 obs 
+Urtekram_pb_cream <- sales_data[grep("rtekram Vegetab. Kaffefløde", sales_data$ArticleText),]
+
+# add together 
+plant_cream <- rbind(soya, oat, almond, Urtekram_pb_cream) # 515 obs 
+
+# split away plant-based 
+non_plant_cream <- anti_join(cream_category, plant_cream) # 70,913 obs
+
+# add milk data frames to relevant categories 
+pb_dairy <- rbind(pb_dairy, plant_cream) # 13,500 obs 
+n_dairy <- rbind(n_dairy, non_plant_cream) # 373,968 obs
+
+# clean up environment 
+rm(cream_category, cream_category_unique, soya, oat, almond, plant_cream, non_plant_cream)
+
+```
+
+```{r gfk_dairy_snacks}
+dairy_snacks <- sales_data %>% subset(PgText == "Mejerisnack (013)") # 3940 
+dairy_snacks_unique <- dairy_snacks %>% distinct(ArticleText, .keep_all = T) # 19 obs 
+
+# all of the dairy snacks belong in the dairy category so we'll add them to n_dairy 
+n_dairy <- rbind(n_dairy, dairy_snacks) # 377,908
+
+# clean up environment 
+rm(dairy_snacks, dairy_snacks_unique)
+```
+
+```{r gfk_icecream}
+# -- Ice Cream -- 
+ice_cream_category <- sales_data %>% subset(PgText == "Is (022)") # 52,980
+ice_cream_unique <- ice_cream_category %>% distinct(ArticleText, .keep_all = T) # 972 
+
+# plant based 
+oat_icecream <- ice_cream_category[grep("Oat", ice_cream_category$ArticleText),] # 7 obs 
+vegan_icecream <- ice_cream_category[grep("Vegan", ice_cream_category$ArticleText), ] # 4obs 
+dairy_free <- ice_cream_category[grep("Mælkefri", ice_cream_category$ArticleText), ] # 1 obs
+tofuline <- ice_cream_category[grep("Tofuline", ice_cream_category$ArticleText), ] # 10 obs 
+vegetal <- sales_data[grep("Vegetal", sales_data$ArticleText), ] # 1 obs 
+
+# add together and bind to pb_dairy 
+plant_icecream <- rbind(oat_icecream, vegan_icecream, dairy_free, tofuline, vegetal) # 23 
+
+# split away from ice_cream_category 
+non_pb_icecream <- anti_join(ice_cream_category, plant_icecream) # 52,958 obs 
+
+# add to relevant dataframes 
+pb_dairy <- rbind(pb_dairy, plant_icecream) # 13,523 
+n_dairy <- rbind(n_dairy, non_pb_icecream) # 430,866 obs 
+
+# clean environment 
+rm(ice_cream_category, ice_cream_unique, oat_icecream, vegan_icecream, dairy_free, tofuline,
+   plant_icecream, non_pb_icecream)
+```
+
+```{r gfk_milk}
+# -- Milk -- 
+milk_category <- sales_data %>% subset(PgText == "Mælk (007)") #347,196 obs 
+milk_category_unique <- milk_category %>% distinct(ArticleText, .keep_all = T) # 415 obs
+
+# plant based 
+almond_milk <- milk_category[grep("Mandel", milk_category$ArticleText), ] # 792 obs 
+almond_milk_2 <- milk_category[grep("Almond", milk_category$ArticleText), ] # 84 obs
+oat_milk <- milk_category[grep("Havre", milk_category$ArticleText), ] # 1324 obs 
+oat_milk_2 <- milk_category[grep("Oat", milk_category$ArticleText), ] # 77 obs 
+soya <- milk_category[grep("Soy", milk_category$ArticleText), ] # 2205 obs
+coconut_milk <- milk_category[grep("Kokos", milk_category$ArticleText), ] # 43 obs
+coconut_milk2 <- milk_category[grep("Coconut", milk_category$ArticleText), ] # 40 obs 
+rice_milk <- milk_category[grep("Ris", milk_category$ArticleText), ] # 484
+rice_milk2 <- milk_category[grep("Rice", milk_category$ArticleText), ] # 17 obs
+
+# combine together 
+plant_milk <- rbind(almond_milk, almond_milk_2, oat_milk, oat_milk_2, soya, coconut_milk, 
+                    coconut_milk2, rice_milk, rice_milk2) # 5066 obs 
+
+#non plant-based 
+non_plant_milk <- anti_join(milk_category, plant_milk) # 342,320 obs 
+
+# add milk data frames to relevant categories 
+pb_dairy <- rbind(pb_dairy, plant_milk) # 18,589 
+n_dairy <- rbind(n_dairy, non_plant_milk) # 773,186 obs 
+
+# clean up environment 
+rm(milk_category, milk_category_unique, almond_milk, almond_milk_2, oat_milk, oat_milk_2,
+   soya,coconut_milk,coconut_milk2, rice_milk, rice_milk2, plant_milk, non_plant_milk)
+
+```
+
+```{r gfk_sour_milk_products}
+sour_milk_products <- sales_data %>% subset(PgText == "Surmælksprodukter (008)") #187k 
+sour_milk_unique <- sour_milk_products %>% distinct(ArticleText, .keep_all = T)
+
+# look for plant-based products 
+soya <- sour_milk_products[grep("Soy", sour_milk_products$ArticleText),] # 835 obs 
+Havre <- sour_milk_products[grep("Havrefraiche", sour_milk_products$ArticleText),] # 2 obs 
+Oatly <- sour_milk_products[grep("Oatly", sour_milk_products$ArticleText),] # 17 obs
+alpro <- sour_milk_products[grep("Alpro", sour_milk_products$ArticleText),] # 1303 
+vegan_yogurt <- sour_milk_products[grep("Vegan", sour_milk_products$ArticleText),] # 1 ob
+
+# add them together 
+pb_sourmilk <- rbind(soya, Havre, Oatly, alpro, vegan_yogurt) # 2158
+
+# split from other products 
+non_pb_sourmilk <- anti_join(sour_milk_products, pb_sourmilk)
+
+# add to categories 
+pb_dairy <- rbind(pb_dairy, pb_sourmilk) # 20,747
+n_dairy <- rbind(n_dairy, non_pb_sourmilk) # 958,904 obs  
+
+# clean up environment 
+rm(sour_milk_products, sour_milk_unique, soya, Havre, Oatly, alpro, vegan_yogurt,
+   pb_sourmilk, non_pb_sourmilk)
+```
+
+```{r gfk_spreads}
+# -- Margarine and Spreads -- 
+## Here we select the products specifically stating they are plantbased 
+margarine_category <- sales_data %>% subset(PgText == "Margarine (002)") # 31,301
+margarine_unique <- margarine_category %>% distinct(ArticleText, .keep_all = T) # 83 
+
+# plant based 
+plantemargarine <- margarine_category[grep("Plant", 
+                                           margarine_category$ArticleText),] # 1720
+oliemargarine <- margarine_category[grep("Oliemargarine", 
+                                           margarine_category$ArticleText),] # 5895
+sunflower <- margarine_category[grep("Sunflower", margarine_category$ArticleText),] #6 obs 
+kokosolie <- margarine_category[grep("Kokosolie", margarine_category$ArticleText),] # 20 obs 
+
+# add together 
+plant_margarine <- rbind(plantemargarine, oliemargarine, sunflower, kokosolie) # 7641 
+
+# split away from main margarine category 
+non_plant_margarine <- anti_join(margarine_category, plant_margarine) # 23667 
+
+# add to the appropriate categories 
+pb_dairy <- rbind(pb_dairy, plant_margarine) # 28,388
+n_dairy <- rbind(n_dairy, non_plant_margarine) # 982,571 obs 
+
+# clean up margarine 
+rm(margarine_category, margarine_unique, plantemargarine, oliemargarine, kokosolie, sunflower, plant_margarine, non_plant_margarine)
+
+ 
+# -- Spreads -- 
+Paaleag <- sales_data %>% subset(PgText == 'Pålæg- og Smørechokolade (038)') # 17,271 
+Pålægssalater <- sales_data %>% subset(PgText == 'Pålægssalater (149)') # 106k 
+spread <- sales_data[grep("Spread", sales_data$ArticleText),]
+
+# add the two together 
+spreads <- rbind(Paaleag, Pålægssalater, spread) %>% distinct() # 123k 
+spread_unique <- spreads %>% distinct(ArticleText, .keep_all = T) # 744 
+
+# find plant based
+plant <- spreads[grep("Plant", spreads$ArticleText),] # 158 obs 
+vegan <- spreads[grep("Vegan", spreads$ArticleText),] # 1 obs 
+Urte_spread <- spreads[grep("Urtekram Sandwich Spread", spreads$ArticleText),] # 37 obs 
+vitam_spread <- spreads[grep("VITAM", spreads$ArticleText),] # 22 obs 
+
+# add together 
+pb_spreads <- rbind(plant, vegan, Urte_spread, vitam_spread)  #218 obs
+
+# split away from non-plant-based 
+n_spreads <- anti_join(spreads, pb_spreads) #123,371
+
+# add to relevant category 
+pb_dairy <- rbind(pb_dairy, pb_spreads) # 28606
+n_dairy <- rbind(n_dairy, n_spreads) #1105,942 obs 
+
+# clean up environment 
+rm(Paaleag, Pålægssalater, spread, spreads, spread_unique, plant, vegan, Urte_spread,
+   vitam_spread, pb_spreads)
+```
+
+```{r save_pb_dairy}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_dairy_unique <- pb_dairy %>%  distinct()# 20,139 obs 
+
+# save 
+write.csv(pb_dairy_unique, "data/categorized_sales/pb_dairy.csv", row.names = F)
+```
+
+
+## GFK Meat 
+Meat product categories = 031 (Chicken and Poultry), 048 (Liverpostej), 049 (Pate and Bacon), 
+052 (Meat, not including fish), 053 (Sausages), 054 (Cold meat cuts)
+
+The meat category spans across many different gfk-categories, beyond the main categories listed above. This makes it harder to find the plant-based alternatives. For this reason, we'll start broad by looking for the vegan products and known plant-based brands first, and then filter down from there. 
+
+-- Wide Search -- 
+```{r vegan}
+# -- Vegan Meat -- 
+vegan <- sales_data[grep("Vegan", sales_data$ArticleText), ]
+vegan_unique <- vegan %>% distinct(ArticleText, .keep_all = T)
+
+# plant-based meat 
+vegan_sausages <- vegan[grep("Veganwurst", vegan$ArticleText),] # 3 obs 
+polse <- vegan[grep("Pølse", vegan$ArticleText),] # 4 obs 
+postej <- vegan[grep("Postej", vegan$ArticleText),] # 117 obs 
+bof <- vegan[grep("Bøf", vegan$ArticleText),] # 9 obs 
+burger <- vegan[grep("Burger", vegan$ArticleText),] # 87 obs 
+boller <- vegan[grep("Boller", vegan$ArticleText),] # 24 obs 
+pålæg <- vegan[grep("pålæg", vegan$ArticleText),] # 114 obs 
+chorizo <- vegan[grep("Chorizo", vegan$ArticleText),] # 5 obs 
+Filetstykker <- vegan[grep("Filetstykker", vegan$ArticleText),] # 66 obs 
+
+# add together 
+plant_meat <- rbind(vegan_sausages, polse, postej, bof, burger, boller, pålæg, 
+                    chorizo, Filetstykker) # 429 obs 
+
+# add to the appropriate category 
+pb_meat <- rbind(pb_meat, plant_meat) # 1164 obs 
+
+# remove meats from vegan category 
+vegan <- anti_join(vegan, plant_meat) # 226 obs 
+
+# clean up environment 
+rm(vegan_sausages, polse, postej, bof, burger, boller, pålæg, 
+                    chorizo, Filetstykker, vegan_unique, plant_meat)
+
+```
+
+-- By Brand-- 
+```{r Anamma Vego}
+anamma <- sales_data[grep("Anamma", sales_data$ArticleText), ] # 13 obs 
+
+# meat alternative 
+burger <- anamma[grep("Burgere", anamma$ArticleText), ] # 5 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, burger) # 1169 obs 
+
+# split from the rest of anamma
+anamma <- anti_join(anamma, burger) # 8 obs 
+
+# clean environment 
+rm(burger)
+```
+
+```{r Den Grønne Slagter}
+Grønne_Slagter <- sales_data[grep("Den Grønne Slagter", sales_data$ArticleText), ] # 10,383 
+Grønne_Slagter_unique <- Grønne_Slagter %>% distinct(ArticleText, .keep_all = T)
+
+# plant-based
+veggie <- Grønne_Slagter[grep("Veggie", Grønne_Slagter$ArticleText), ] # 849 
+
+# split from Grønne_Slagter
+Grønne_Slagter <- anti_join(Grønne_Slagter, veggie) #9534 
+
+# add to relevant categories 
+pb_meat <- rbind(pb_meat, veggie) # 2018
+n_meat <- rbind(n_meat, Grønne_Slagter) #9534 
+
+# clean up environment 
+rm(Grønne_Slagter, Grønne_Slagter_unique, veggie)
+```
+
+```{r Grøntsags}
+# -- Vegetables -- 
+# we've removed fruit and vegetables from our sales data previously, so here we can look for vegetable products 
+Grøntsags <- sales_data[grep("Grøntsags", sales_data$ArticleText), ] 
+Grøntsags_unique <- Grøntsags %>% distinct(ArticleText, .keep_all = T) # 9 obs 
+
+# Find the meat substitutes 
+Grøntsagsbøffer <- Grøntsags[grep("Grøntsagsbøffer", Grøntsags$ArticleText), ] # 87 obs
+Frikadeller <- Grøntsags[grep("Frikadeller", Grøntsags$ArticleText), ] # 55 obs 
+Grøntsagsboller <- Grøntsags[grep("Grøntsagsboller", Grøntsags$ArticleText), ] # obs 
+
+# add together
+Grøntsags_meat <- rbind(Grøntsagsbøffer, Frikadeller, Grøntsagsboller) # 145 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, Grøntsags_meat) # 2163 obs 
+
+# split away from Grøntsags category 
+Grøntsags <- anti_join(Grøntsags, Grøntsags_meat)  
+
+# clean up environment 
+rm(Grøntsags_unique, Grøntsagsbøffer, Frikadeller, Grøntsagsboller, Grøntsags_meat)
+```
+
+```{r Hälsans}
+Hälsans <- sales_data[grep("Hälsans", sales_data$ArticleText), ] # 632 
+Hälsans_unique <- Hälsans %>% distinct(ArticleText, .keep_all = T) # 17 obs 
+
+# plant based meat alternative 
+polse <- Hälsans[grep("pølser", Hälsans$ArticleText), ] # 66 obs 
+nuggets <- Hälsans[grep("Nuggets", Hälsans$ArticleText), ]# 54 obs
+kebab <- Hälsans[grep("Kebab", Hälsans$ArticleText), ] # 3 obs 
+Burger <- Hälsans[grep("Burger", Hälsans$ArticleText), ]# 87 obs 
+Linseburger <- Hälsans[grep("Linseburger", Hälsans$ArticleText), ] # 9 obs 
+Grøntsagsboller <- Hälsans[grep("Grøntsagsboller", Hälsans$ArticleText), ]# 3 obs
+boller <- Hälsans[grep("Boller", Hälsans$ArticleText), ] # 24 obs
+Filetstykker <- Hälsans[grep("Filetstykker", Hälsans$ArticleText), ] #66 obs 
+Toscanske <- Hälsans[grep("Toscanske", Hälsans$ArticleText), ] # 1 obs 
+
+# add together 
+Hälsans_meat <- rbind(polse, nuggets, kebab, Burger, Linseburger, Grøntsagsboller, 
+                      boller, Filetstykker, Toscanske) # 312 obs 
+
+# split away from other products 
+Hälsans <- anti_join(Hälsans, Hälsans_meat) # 266 obs 
+
+# add to relevant category
+pb_meat <- rbind(pb_meat, Hälsans_meat) # 2476 obs
+
+# clean environment 
+rm(Hälsans_unique, polse, nuggets, kebab, Burger, Linseburger, Grøntsagsboller, 
+   boller, Filetstykker, Toscanske, Hälsans_meat)
+```
+
+```{r LikeMeat}
+LikeMeat <- sales_data[grep("LikeMeat", sales_data$ArticleText), ] # 13 obs (all meat subs)
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, LikeMeat) # 2489 obs 
+
+rm(LikeMeat)
+```
+
+```{r My Best Veggie}
+# -- A Lidl Veggie brand -- 
+best_veggie <- sales_data[grep("Best Veggie", sales_data$ArticleText), ] # 5 (all meat subs)
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, best_veggie) # 2494 obs 
+
+# clean enviroment 
+rm(best_veggie)
+```
+
+```{r Naturli}
+# -- Naturli -- 
+# A brand known for producing plant-based alternatives 
+naturli <- sales_data[grep("Naturli ", sales_data$ArticleText), ] # 6976
+naturli_unique <- naturli %>% distinct(ArticleText, .keep_all = T) # 44 obs 
+
+# plant based 
+hakket <- naturli[grep("Hakket ", naturli$ArticleText), ] # 335 obs 
+Frikadeller <- naturli[grep("Frikadeller", naturli$ArticleText), ] # 2 obs 
+burger <- naturli[grep("burger", naturli$ArticleText), ] # 1 obs
+Burger <- naturli[grep("Burger", naturli$ArticleText), ] # 7 obs 
+pålæg <- naturli[grep("pålæg", naturli$ArticleText), ] # 88 obs 
+Seitan <- naturli[grep("Seitan", naturli$ArticleText), ] # 21 obs
+tofu <- naturli[grep("Tofu", naturli$ArticleText), ]# 11 obs 
+
+# add together 
+naturli_meat <- rbind(hakket, Frikadeller, burger, Burger, pålæg, Seitan, tofu) # 465 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, naturli_meat) # 2959 
+
+# remove meat from naturli 
+naturli <- anti_join(naturli, naturli_meat) # 6511 obs 
+
+# clean environment 
+rm(naturli_unique, hakket, Frikadeller, burger, Burger, pålæg, Seitan, tofu, naturli_meat)
+```
+
+```{r Økolivet Vegansk}
+okolivet  <- sales_data[grep("Økolivet Vegansk", sales_data$ArticleText), ] # 88 obs 
+okolivet_unique <- okolivet %>% distinct(ArticleText, .keep_all = T) # 2 obs 
+
+# meat substitutes
+Smørepålæg <- okolivet[grep("Smørepålæg", okolivet$ArticleText), ] # 84 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, Smørepålæg) # 3043 obs 
+
+# remove from rest of okolivet 
+okolivet <- anti_join(okolivet, Smørepålæg) # 4 obs 
+
+# clean environment 
+rm(okolivet_unique, Smørepålæg)
+```
+
+```{r Ponnath}
+Ponnath  <- sales_data[grep("Ponnath", sales_data$ArticleText), ] # 9 obs frikedellar 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, Ponnath) # 3052
+
+# clean environment 
+rm(Ponnath)
+```
+
+```{r Quorn}
+quorn <- sales_data[grep("Quorn", sales_data$ArticleText), ] # 23 obs 
+
+# meat alternatives 
+quorn_nugs <- quorn[grep("Nuggets", quorn$ArticleText), ] # 5 obs 
+ham <- quorn[grep("Skinke", quorn$ArticleText), ] # 3 obs 
+chicken <- quorn[grep("Kylling", quorn$ArticleText), ]# 1 obs 
+burger <- quorn[grep("Burger", quorn$ArticleText), ]# 5 obs 
+Schnitzel <- quorn[grep("Schnitzel", quorn$ArticleText), ] # 1 obs 
+strimler <- quorn[grep("Strimler", quorn$ArticleText), ] # 2 obs 
+steaks <- quorn[grep("Steak", quorn$ArticleText), ] # 2 obs 
+
+# add together 
+quorn_meat <- rbind(quorn_nugs, ham, chicken, burger, Schnitzel, strimler, steaks) # 19 obs 
+
+# add to categories 
+pb_meat <- rbind(pb_meat, quorn_meat) # 3071 
+
+# split away from main category 
+quorn <- anti_join(quorn, quorn_meat) # 4 obs 
+
+#clean environment 
+rm(quorn_nugs, ham, chicken, burger, Schnitzel, strimler, steaks, quorn_meat)
+```
+
+```{r Tartex}
+Tartex <- sales_data[grep("Tartex", sales_data$ArticleText), ]# 14 obs (all veg paté)
+
+# add directly into pb_meat 
+pb_meat <- rbind(pb_meat, Tartex) # 3085 obs 
+
+# clear from environment 
+rm(Tartex)
+```
+
+```{r Tivall}
+Tivall <- sales_data[grep("Tivall", sales_data$ArticleText), ] # 453 obs 
+Tivall_unique <- Tivall %>% distinct(ArticleText, .keep_all = T) # 19 obs 
+Hälsans <- Tivall[grep("Hälsans", Tivall$ArticleText), ] # 423 
+Tivall <- anti_join(Tivall, Hälsans) # split away where they share products (30 obs)
+
+# plant based meat alternatives
+polse <- Tivall[grep("Pølse", Tivall$ArticleText), ] # 2 obs 
+bof <- Tivall[grep("Bøf", Tivall$ArticleText), ] # 9 obs 
+
+# add together 
+Tivall_meat <- rbind(polse, bof) # 18 obs 
+
+# split away from rest of Tivall 
+Tivall <- anti_join(Tivall, Tivall_meat) # 12 obs 
+
+# add to relevant category 
+pb_meat <- rbind(pb_meat, Tivall_meat) # 3096 obs 
+
+# clean environment 
+rm(Tivall_unique, polse, bof, Tivall_meat)
+```
+
+```{r Urtekram}
+Urtekram <- sales_data[grep("Urtekram", sales_data$ArticleText), ] #9351 
+Urtekram_unique <- Urtekram %>% distinct(ArticleText, .keep_all = T) # 391 
+
+# meat alternatives  
+Tofu <- Urtekram[grep("Tofu", Urtekram$ArticleText),] # 7 obs 
+Paté <- Urtekram[grep("Paté", Urtekram$ArticleText),] # 35 obs 
+nuggets <- Urtekram[grep("Nuggets", Urtekram$ArticleText),]  # 7 obs 
+
+# add together 
+urtekram_meat <- rbind(Tofu, Paté, nuggets) # 49 obs 
+
+# split away from other products 
+Urtekram <- anti_join(Urtekram, urtekram_meat) # 9263
+
+# add to relevant categories 
+pb_meat <- rbind(pb_meat, urtekram_meat) # 3145 
+
+# clean up environment
+rm(Urtekram_unique, urtekram_meat, Tofu, Paté, nuggets)
+```
+
+```{r Vegin}
+Vegin <- sales_data[grep("Vegin", sales_data$ArticleText), ] # 9 obs (all pølse)
+
+# add directly to pb_meat 
+pb_meat <- rbind(pb_meat, Vegin) # 3154 obs  
+
+rm(Vegin)
+```
+
+-- By Product -- 
+```{r Tofu}
+tofu <- sales_data[grep("Tofu", sales_data$ArticleText), ] # 78 obs 
+
+# find the products not already in pb_meat 
+tofu <- anti_join(tofu, pb_meat) # 55 obs
+
+# find the meat alternatives 
+biogan <- tofu[grep("Biogan", tofu$ArticleText), ] # 6 obs 
+soyavit <- tofu[grep("Soyavit", tofu$ArticleText), ] # 1 obs 
+standard_tofu <- tofu[grep("Tofu 300 gr", tofu$ArticleText), ] # 23 obs 
+standard_tofu2 <- tofu[grep("Tofu Produkt 125 gr", tofu$ArticleText), ] # 1 obs 
+
+# add together 
+pb_tofu <- rbind(biogan, soyavit, standard_tofu, standard_tofu2) # 31 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, pb_tofu) # 3185 
+
+# clean up environment 
+rm(tofu, biogan, soyavit, standard_tofu, standard_tofu2, pb_tofu)
+```
+
+```{r Boullion}
+boullion <- sales_data[grep("Boullion", sales_data$ArticleText), ] # 3795 
+boullion_unique <- boullion %>% distinct(ArticleText, .keep_all = T) # 25 obs 
+
+# look for plant_based 
+plant_boullion <- boullion[grep("Grøntsags", boullion$ArticleText), ] # 559 obs 
+plant_boullion2 <- boullion[grep("Grønsags", boullion$ArticleText), ] # 196 
+plant_boullion <- rbind(plant_boullion, plant_boullion2) #755 
+  
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, plant_boullion) #3940 
+
+# clean environment 
+rm(boullion, boullion_unique, plant_boullion, plant_boullion2)
+```
+
+```{r various products}
+Jordnøddebøffer <- sales_data[grep("Jordnøddebøffer", sales_data$ArticleText), ] # 11 obs 
+veg_frikadeller <- sales_data[grep("Vegetariske Frikadeller", sales_data$ArticleText),] #33 
+vegetar_salami <- sales_data[grep("Vegetar Salami", sales_data$ArticleText), ] # 13 obs 
+veg_Paté <- sales_data[grep("Vegetaroan Paté", sales_data$ArticleText), ] # 1 ob 
+Smørepålæg <- sales_data[grep("Vegetables Smørepålæg", sales_data$ArticleText), ] # 8 obs 
+vegan_chorizo <- sales_data[grep("Vegan Chorizo", sales_data$ArticleText), ] # 3 obs 
+Vagawurst <- sales_data[grep("Vagawurst", sales_data$ArticleText), ] # 1 obs 
+karry_bratwurst <- sales_data[grep("Karry-Bratwurst Vegetar", sales_data$ArticleText), ] #1ob
+hanegal_postej <- sales_data[grep("Hanegal Vegansk Postej", sales_data$ArticleText), ]#117ob
+Veganwurst <- sales_data[grep("Veganwurst", sales_data$ArticleText), ] # 3 obs 
+
+# add together 
+pb_meat_misc <- rbind(Jordnøddebøffer, veg_frikadeller, vegetar_salami, veg_Paté,
+                      Smørepålæg, vegan_chorizo, Vagawurst, karry_bratwurst, 
+                      hanegal_postej, Veganwurst) # 191 obs 
+
+# add to pb_meat 
+pb_meat <- rbind(pb_meat, pb_meat_misc)  #4131 
+
+# clean up environment 
+rm(Jordnøddebøffer, veg_frikadeller, vegetar_salami, veg_Paté, Smørepålæg, vegan_chorizo, Vagawurst, karry_bratwurst, hanegal_postej, Veganwurst, pb_meat_misc)
+```
+
+-- Filtering away duplicates and saving -- 
+```{r save_pb_meats}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_meat_unique <- pb_meat %>%  distinct()# 3,188 obs 
+
+# save 
+write.csv(pb_meat_unique, "data/categorized_sales/pb_meat.csv", row.names = F)
+```
+
+
+## GFK Eggs 
+The egg category = 006 (Eggs)
+
+This category is typically used for storing non_plant_based egg products therefore we'll have to expand out our search and see if we can locate the plant based alternatives. First, we'll check if any alternative egg products exist within the egg category: 
+```{r gfk-eggs}
+# -- Eggs -- 
+egg_category <- sales_data %>% subset(PgText == "Æg (006)") # 86,137 
+egg_category_unique <- egg_category %>% distinct(ArticleText, .keep_all = T) # 226 
+# all products relate to non-plant-based eggs, thus we'll add to the dataframe 
+n_eggs <- egg_category # 86,137 
+rm(egg_category, egg_category_unique)
+
+# We'll also do a wide search for "yolk (Blomme)" and "whites (Hvider)" 
+egg_yolk <- sales_data[grep("Blomme", sales_data$ArticleText), ] 
+egg_yolk_unique <- egg_yolk %>% distinct(ArticleText, .keep_all = T) # all fruit or egg
+
+egg_white <- sales_data[grep("Hvider", sales_data$ArticleText), ] # 1779 
+egg_white_unique <- egg_white %>% distinct(ArticleText, .keep_all = T) # 5 obs (all eggs)
+
+# clean environment 
+rm(egg_yolk, egg_yolk_unique, egg_white, egg_white_unique)
+```
+
+Then we'll see other plant based products: starting with egg-based sauces  
+```{r Mayonnaise_and_sauces}
+Mayo <- sales_data[grep("Mayo", sales_data$ArticleText), ] 
+Aioli <- sales_data[grep("Aioli", sales_data$ArticleText), ] # 1128  
+aioli <- sales_data[grep("aioli", sales_data$ArticleText), ] # 9 obs 
+Bearnaise <- sales_data[grep("Bearnaise", sales_data$ArticleText), ]#10434 
+bearnaise <- sales_data[grep("bearnaise", sales_data$ArticleText), ] #51 
+dijon <- sales_data[grep("Dijon", sales_data$ArticleText), ] # 2424 
+Hollandaise <- sales_data[grep("Hollandaise", sales_data$ArticleText), ] # 1192
+Remoulade <- sales_data[grep("Remoulade", sales_data$ArticleText), ] # 19169 
+
+# add egg-based sauces together 
+egg_base_sauce <- rbind(Mayo, Aioli, aioli, Bearnaise, bearnaise, dijon, 
+                        Hollandaise, Remoulade)
+egg_base_unique <- egg_base_sauce %>% distinct(ArticleText, .keep_all = T) # 213 
+
+# find plant based alternatives
+vegan_mayo <- egg_base_sauce[grep("Vegan", egg_base_sauce$ArticleText), ] # 1 ob 
+biogan <- egg_base_sauce[grep("Biogan", egg_base_sauce$ArticleText), ] # 2 obs 
+urtekram_vegan_ <- egg_base_sauce[grep("Urtekram", egg_base_sauce$ArticleText), ] # 115 
+Naturata <- egg_base_sauce[grep("Naturata", egg_base_sauce$ArticleText), ] # 3 obs 
+Naturli_egg <- egg_base_sauce[grep("Naturli", egg_base_sauce$ArticleText), ] # 8 obs 
+
+# add together 
+pb_egg_sauce <- rbind(vegan_mayo, biogan, urtekram_vegan_, Naturata, Naturli_egg)
+
+# add to pb_eggs 
+pb_eggs <- rbind(pb_eggs, pb_egg_sauce) # 280 obs 
+
+# clean up environment 
+rm(Mayo, Aioli, aioli, Bearnaise, bearnaise, dijon, Hollandaise, Remoulade,
+   egg_base_sauce, egg_base_unique, vegan_mayo, biogan, urtekram_vegan_, Naturata,
+   Naturli_egg, pb_egg_sauce)
+```
+
+Then we'll look for plant-based pasta 
+```{r Pasta}
+# From categories 
+Spaghetti <- sales_data %>% subset(PgText == "Spaghetti (035)") # 34017 
+pasta_category <- sales_data %>% subset(PgText == "Pasta- og Risretter (056)") # 11880 
+
+# some searches 
+Fettuccine <- sales_data[grep("Fettuccine", sales_data$ArticleText), ] # 4965 
+Penne <- sales_data[grep("Penne", sales_data$ArticleText), ] # 1816 obs 
+gnocchi <- sales_data[grep("Gnocchi", sales_data$ArticleText), ] #326 
+
+# bind together and delete duplicates 
+pasta <- rbind(Spaghetti, pasta_category, Fettuccine, Penne, gnocchi) %>% distinct() # 46138
+
+# look for plant based alternatives 
+vegan_pasta <- pasta[grep("Vegan", pasta$ArticleText),] # 0 obs 
+plant_based_pasta <- pasta[grep("Plant", pasta$ArticleText),] # 0 obs 
+naturli_pasta <- pasta[grep("Naturli", pasta$ArticleText),] # 9 obs 
+
+# add naturli to pb_eggs 
+pb_eggs <- rbind(pb_eggs, naturli_pasta) # 289 
+
+# clean environment 
+rm(Spaghetti, pasta_category, Fettuccine, Penne, gnocchi, pasta, vegan_pasta, 
+   plant_based_pasta, naturli_pasta) 
+```
+
+```{r save_pb_eggs}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_eggs_unique <- pb_eggs %>% distinct() # 273 obs 
+
+# save 
+write.csv(pb_eggs_unique, "data/categorized_sales/pb_eggs.csv", row.names = F)
+```
+
+
+## GFK Seafood 
+The seafood sector is expected to grow the most, but many of the products are yet to hit Denmark. Below, we'll see if we can find any of the new brands in our sales data. 
+```{r seafood}
+fish <- sales_data %>% subset(PgText == "Fisk og Skaldyr (055)") # 71636 
+fiskesovs <- sales_data[grep("Gardein", sales_data$ArticleText), ] # 0 obs 
+
+# look for plant based alternatives by brand 
+tune_free <- sales_data[grep("Tuna Free", sales_data$ArticleText), ] # 0 articles 
+mackerel_free <- sales_data[grep("Mackerel Free", sales_data$ArticleText), ]
+cavi_art <- sales_data[grep("Cavi-Art", sales_data$ArticleText), ] # 8 articles
+Citronperler <- sales_data[grep("Citronperler", sales_data$ArticleText), ] # 24 obs 
+good_catch <- sales_data[grep("GoodCatch", sales_data$ArticleText), ] # 0 obs 
+gardein <- sales_data[grep("Gardein", sales_data$ArticleText), ] # 0 obs 
+beleaf <- sales_data[grep("BeLeaf", sales_data$ArticleText), ] # 0 obs 
+uptons <- sales_data[grep("Uptons", sales_data$ArticleText), ]# 0 obs
+jinka <- sales_data[grep("Jinka", sales_data$ArticleText), ] # 0 obs 
+tu_nah <- sales_data[grep("Tu'NAH", sales_data$ArticleText), ] # 0 pbs 
+
+# add adticles with sales 
+pb_fish <- rbind(cavi_art, Citronperler) # 32 obs 
+
+# add to pb_seafood 
+pb_seafood <- rbind(pb_seafood, pb_fish)
+ 
+#Clean environment 
+rm(fish, fiskesovs, tuna_free, mackerel_free, cavi_art, Citronperler, good_catch, 
+   gardein, beleaf, uptons, jinka, tu_nah)
+```
+
+```{r save_pb_seafood}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_seafood_unique <- pb_seafood %>% distinct() # 32 obs 
+
+# save 
+write.csv(pb_seafood_unique, "data/categorized_sales/pb_seafood.csv", row.names = F)
+```
+
+## GFK Meals 	
+The ready meal cateory is closely intertwined with the meat substitutes and therefore the following guidelines have been used to delineate between the 2 where necessary:
+
+i) If the product is intended to replace a typical meat product (e.g., a steak, burger, nugget etc it is classified as a meat substitute.) 
+ii) If the product is replacing multiple animal-based products, or is a dinner item in its own right without claiming to be a meat imitation, then it is considered a ready meal (e., Pizza, Bolognese, Curry, Stroganoff,  Falafel)
+
+To find the ready-meals, we will start by picking up the plant-based brands used in looking for meat alternatives: 
+Naturli, Hälsans, Quorn, Urtekram, Tivall, Anamma Vego, Økolivet
+
+We will then look for specific food dishes which are typically used used as a plant-based alternative such as curries, pasta dishes, pizza etc. 
+
+Finally, we will subset the two meal categories which fit within this category, extract the already found plant-based products, and ensure we have not missed any. The two categories are as below: 
+Færdigretter (110) = Ready Meals 
+Middagsretter på dåse (110) = Canned dinner dishes 
+
+
+-- Wide Search -- 
+```{r vegan_readymeal}
+# find the readymeals within the vegan dataframe 
+Veganroulade <- vegan[grep("Veganroulade", vegan$ArticleText), ] # 3obs 
+Bolognese <- vegan[grep("Bolognese", vegan$ArticleText), ] # 52 obs 
+stykker <- vegan[grep("Grillede Stykker", vegan$ArticleText), ] # 12 obs 
+Falafel <- vegan[grep("Falafel", vegan$ArticleText), ] # 123 obs 
+pizza <- vegan[grep("Pizza", vegan$ArticleText), ] # 15 obs 
+curry <- vegan[grep("Karry", vegan$ArticleText), ] # 4 obs 
+Bruschetta <- vegan[grep("Bruschetta", vegan$ArticleText), ]# 3 obs 
+
+# add together 
+vegan_readymeals <- rbind(Veganroulade, Bolognese, stykker, Falafel, pizza, curry, Bruschetta)
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, vegan_readymeals) # 230 
+
+# remove from vegan df 
+vegan <- anti_join(vegan, vegan_readymeals) # 17 obs 
+
+# clean environment 
+rm(Veganroulade, Bolognese, stykker, Falafel, pizza, curry, Bruschetta, vegan_readymeals)
+```
+
+-- By Brand -- 
+```{r Anamma_Vego_readymeal}
+# consider the remaining products 
+unique(anamma$ArticleText) # both belong in pb_readymeal so we'll add the directly (bites & )
+
+# add to pb_readymeal 
+pb_readymeals <- rbind(pb_readymeals, anamma) # 238 
+
+# clean environment 
+rm(anamma)
+```
+
+```{r Beauvais}
+Beauvais <- sales_data[grep("Beauvais", sales_data$ArticleText), ]
+Beauvais_unique <- Beauvais %>% distinct(ArticleText, .keep_all = T)
+
+# look for the plant-based products 
+veggie <- Beauvais[grep("Veggie", Beauvais$ArticleText), ] # 28 obs 
+tikka_masala <- Beauvais[grep("Tikka Masala Grøntsags", Beauvais$ArticleText), ] # 2 obs 
+lasagne <- Beauvais[grep("Grøntsagslasagne", Beauvais$ArticleText), ] # 2 obs 
+Grøntsagsssuppe <- Beauvais[grep("Grøntsagsssuppe", Beauvais$ArticleText), ] # 1 obs 
+
+# add together 
+Beauvais_readymeals <- rbind(veggie, tikka_masala, lasagne, Grøntsagsssuppe) # 33 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Beauvais_readymeals) # 271 obs 
+
+# clean up environment 
+rm(Beauvais, Beauvais_unique, Beauvais_readymeals)
+```
+
+```{r Cofoco}
+Cofoco <- sales_data[grep("Cofoco", sales_data$ArticleText), ] # 112 obs 
+Cofoco_unique <- Cofoco %>% distinct(ArticleText, .keep_all = T) # 17 obs 
+
+# extract plant based 
+Vegetarisk <- Cofoco[grep("Vegetarisk", Cofoco$ArticleText), ] # 7 obs 
+soup <- Cofoco[grep("Porresuppe", Cofoco$ArticleText), ] # 3 obs 
+
+# add together
+pb_cofoco <- rbind(Vegetarisk, soup) # 10 obs 
+
+# add to readymeals 
+pb_readymeals <- rbind(pb_readymeals, pb_cofoco) # 281
+
+# clean up environment 
+rm(Cofoco, Cofoco_unique, Vegetarisk, soup, pb_cofoco)
+```
+
+```{r Daloon}
+daloon <- sales_data[grep("Daloon", sales_data$ArticleText), ] # 3203 
+
+# look for the meatfree range 
+meatfree <- daloon[grep("Meatfree", daloon$ArticleText), ] # 202 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, meatfree) # 483 
+
+# clean up environment 
+rm(daloon, meatfree)
+```
+
+```{r Grøntsags_readymeals}
+# inspect the remaining Grøntsags product s
+Grøntsags_unique <- Grøntsags %>% distinct(ArticleText, .keep_all = T) # 5954 
+
+# identify pb products 
+Grøntsagscurry <- Grøntsags[grep("Grøntsagscurry", Grøntsags$ArticleText), ] # 6 obs 
+vegan_tarte <- Grøntsags[grep("Grøntsagstærte", Grøntsags$ArticleText), ] # 1 ob 
+Grøntsagssalat <- Grøntsags[grep("Grøntsagssalat", Grøntsags$ArticleText), ] # 15 obs 
+
+# add together
+pb_grontsags <- rbind(Grøntsagscurry, vegan_tarte, Grøntsagssalat) # 22 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, pb_grontsags) # 505 obs 
+
+# clean environment 
+rm(Grøntsags, Grøntsags_unique, Grøntsagscurry, vegan_tarte, Grøntsagssalat, pb_grontsags)
+```
+
+```{r Hälsans_readymeals}
+# look for readymeal products 
+Hälsans_unique <- Hälsans %>% distinct(ArticleText, .keep_all = T) # 7 obs 
+
+# ready meal products 
+falafel <- Hälsans[grep("Falafel", Hälsans$ArticleText), ] # 117 obs 
+fars <- Hälsans[grep("Fars", Hälsans$ArticleText), ] # 20 obs 
+Schnitzel <- Hälsans[grep("Schnitzel", Hälsans$ArticleText), ]# 57 obs 
+Vegoschnitzel <- Hälsans[grep("Vegoschnitzel", Hälsans$ArticleText), ] # 33 obs 
+stykker <- Hälsans[grep("Stykker", Hälsans$ArticleText), ] # 92 obs 
+
+# add together 
+Hälsans_readymeal <- rbind(falafel, fars, Schnitzel, Vegoschnitzel, stykker) # 319
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Hälsans_readymeal) # 824obs 
+
+# clean environment 
+rm(Hälsans_unique, Hälsans_readymeal, falafel, fars, Schnitzel, Vegoschnitzel, stykker, Hälsans)
+``` 
+
+```{r Hanegal}
+Hanegal <- sales_data[grep("Hanegal", sales_data$ArticleText), ] # 2622 obs 
+Hanegal_unique <- Hanegal %>% distinct(ArticleText, .keep_all = T)
+
+# look for pb ready meals 
+vegan_bolognese <- Hanegal[grep("Vegansk Bolognese", Hanegal$ArticleText), ] # 7 obs 
+Grøntsagscurry <- Hanegal[grep("Grøntsagscurry", Hanegal$ArticleText), ] # 6 obs 
+Lasagnette <- Hanegal[grep("Grønne Lasagnette", Hanegal$ArticleText), ] # 5 obs 
+Gron_Enebærgryde <- Hanegal[grep("Enebærgryde m/Grøn Mos", Hanegal$ArticleText), ] # 2 obs 
+veg_risotto <- Hanegal[grep("Perlebygotto m/Svampe", Hanegal$ArticleText), ] # 8 obs 
+
+# add together 
+Hanegal_readymeals <- rbind(vegan_bolognese, Grøntsagscurry, Lasagnette, Gron_Enebærgryde,
+                            veg_risotto) # 28 obs 
+
+# split away form other meat Hanegal products 
+Hanegal <- anti_join(Hanegal, Hanegal_readymeals)
+
+# add to appropriate categories 
+pb_readymeals <- rbind(pb_readymeals, Hanegal_readymeals) # 852 ovs 
+n_meat <- rbind(n_meat, Hanegal)
+
+# clean environment 
+rm(Hanegal, Hanegal_unique, Hanegal_readymeals, vegan_bolognese, Grøntsagscurry, 
+   Lasagnette,Gron_Enebærgryde, veg_risotto)
+```
+
+```{r Løgismose}
+Løgismose <- sales_data[grep("Løgismose", sales_data$ArticleText), ] # 14658 
+Løgismose_unique <- Løgismose %>% distinct(ArticleText, .keep_all = T) # 236
+
+# find plant based ready meals 
+plant_based <- Løgismose[grep("Plant", Løgismose$ArticleText), ] # all readymeal 
+Grøntsags <- Løgismose[grep("Grøntsags", Løgismose$ArticleText), ] # all veggie chili 
+
+# add together 
+pb_Løgismose <- rbind(plant_based, Grøntsags)
+
+# add to pb_readymeals
+pb_readymeals <- rbind(pb_readymeals, pb_Løgismose) # 930 obs 
+
+# clean up environment 
+rm(Løgismose, Løgismose_unique, plant_based, Grøntsags, pb_Løgismose)
+```
+
+```{r Naturli_readymeal}
+# search for ready meal products 
+naturli_unique <- naturli %>% distinct(ArticleText, .keep_all = T) # 34 obs 
+
+# find ready meal products 
+falafel <- naturli[grep("Falafel", naturli$ArticleText), ] # 75 obs 
+Stroganoff <- naturli[grep("Stroganoff", naturli$ArticleText), ] # 14 obs 
+Bolognese <- naturli[grep("Bolognese", naturli$ArticleText), ] # 4 obs 
+fars <- naturli[grep("Fars", naturli$ArticleText), ] # 64 obs 
+
+# add together 
+naturli_readymeal <- rbind(falafel, Stroganoff, Bolognese, fars) # 157 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, naturli_readymeal) # 1087 obs 
+
+# split away from naturli data frame 
+naturli <- anti_join(naturli, naturli_readymeal)
+
+# clean environment
+rm(naturli_unique, falafel, Stroganoff, Bolognese, fars, naturli_readymeal)
+```
+
+```{r Økolivet_Vegansk_readymeals}
+# inspect okolivet's remaining products 
+unique(okolivet$ArticleText) # indian curry so we'll add to pb_readymeals 
+
+#add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, okolivet) # 1091 
+
+# clean environment 
+rm(okolivet)
+```
+
+```{r Oumph}
+Oumph <- sales_data[grep("Oumph", sales_data$ArticleText), ] # 9 obs (all pb_readymeal)
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Oumph) # 1100
+
+# clean environemnt 
+rm(Oumph)
+```
+
+```{r Quorn_readymeal}
+# -- check the articles left in this brand -- 
+unique(quorn$ArticleText) # they are all ready meals (Lasagne)
+
+# -- therefore, we'll add them to pb_readymeals -- 
+pb_readymeals <- rbind(pb_readymeals, quorn) # 1104 obs 
+
+# clean environment
+rm(quorn)
+```
+
+```{r Tivall_readymeal}
+# search for the readymeals in the Tivall dataframe 
+falafel <- Tivall[grep("Falafel", Tivall$ArticleText), ] # 7 obs 
+stykker <- Tivall[grep("Vegansk Grillede Stykker", Tivall$ArticleText), ]  #12 obs 
+
+# add together 
+Tivall_readymeal <- rbind(falafel, stykker) # 19 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Tivall_readymeal) # 1123 obs 
+
+# clean up environment 
+rm(falafel, stykker, Tivall_readymeal, Tivall)
+
+```
+
+```{r Urtekram_readymeal}
+# inspect the Urtefram products 
+urtekram_unique <- Urtekram %>% distinct(ArticleText, .keep_all = T) # 387 obs 
+
+# look for readymeals 
+chili <- Urtekram[grep("Chili Sin Carne", Urtekram$ArticleText), ] # 1 obs 
+bolognese <- Urtekram[grep("Bolognese", Urtekram$ArticleText), ] # 45 obs 
+fars <- Urtekram[grep("Fars", Urtekram$ArticleText), ] # 4 obs 
+Lasagne <- Urtekram[grep("Lasagne", Urtekram$ArticleText), ] # 40 obs
+bites <- Urtekram[grep("Bite", Urtekram$ArticleText),] # 3obs 
+falafel <- Urtekram[grep("Falafel", Urtekram$ArticleText),] # 36 obs 
+
+# add together 
+Urtekram_meals <- rbind(chili, bolognese, fars, Lasagne, bites, falafel) # 129 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Urtekram_meals) # 1252 obs 
+
+# split away from rest of Urtekram 
+Urtekram <- anti_join(Urtekram, Urtekram_meals) # 9173 obs 
+
+# clean environment 
+rm(urtekram_unique, chili, bolognese, fars, Lasagne, bites, falafel, Urtekram_meals)
+```
+
+```{r Vemondo}
+vemondo <- sales_data[grep("Vemondo", sales_data$ArticleText), ] # 4 obs 
+
+# extract readymeal  
+falafel <- vemondo[grep("Falafel", vemondo$ArticleText), ] # 2 obs (other goes to confect)
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, falafel) # 1254 obs 
+
+# clean environment
+rm(falafel, vemondo)
+```
+
+-- Typical ready meal dishes -- 
+* also serached for Dahl & ravioli, the staple vegan alternative but no records of this
+```{r pb_curry}
+curry <- sales_data[grep("Curry", sales_data$ArticleText), ] # 1915 obs 
+karry <- sales_data[grep("Karry", sales_data$ArticleText), ] # 19,036 
+
+# add together and get uniques 
+curry <- rbind(curry, karry)
+curry_unique <- curry %>% distinct(ArticleText, .keep_all = T) # 256 
+
+# Look for plant-based products 
+veggie_pot <- curry[grep("Snack Pot Veggie", curry$ArticleText), ] # 2 obs 
+Samosa <- curry[grep("Seamaid Samosa", curry$ArticleText), ] # 13 obs 
+tofu <- curry[grep("Tofu", curry$ArticleText), ] # 2 obs 
+MaeJin_suppe <- curry[grep("MaeJin", curry$ArticleText), ]
+
+# add together 
+pb_curry <- rbind(veggie_pot, Samosa, tofu, MaeJin_suppe) # 18 obs 
+
+# add to pb_ready_meals 
+pb_readymeals <- rbind(pb_readymeals, pb_curry) # 1272 obs 
+
+# clean up environment 
+rm(curry, karry, curry_unique, veggie_pot, Samosa, tofu, MaeJin_suppe, pb_curry)
+```
+
+```{r pb_Falafel}
+# -- Here we're searching within the faerdigretter column -- 
+Falafel <- sales_data[grep("Falafel", sales_data$ArticleText), ] # 764 
+
+# check they are not already in the data frame 
+Falafel <- anti_join(Falafel, pb_readymeals) # 494 ( all are plant based)
+
+# add remaining to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Falafel) # 1766 
+
+# clean environment 
+rm(Falafel)
+```
+
+```{r pb_pizza}
+# -- First look for all Pizza products -- 
+pizza <- sales_data[grep("Pizza", sales_data$ArticleText), ] # 27,373
+pizza_unique <- pizza %>% distinct(ArticleText, .keep_all = T) # 374 obs 
+il_fornaio <- sales_data[grep("Pizzabund m/Tomat Øko", sales_data$ArticleText), ] # 2 obs 
+  
+# look for plant-based pizza 
+vegan_pizza <- pizza[grep("Vegan", pizza$ArticleText), ] # 15 obs 
+Pizzagrønt <- pizza[grep("Pizzagrønt", pizza$ArticleText), ] # 29 obs 
+pomodori <- pizza[grep("Pomodori", pizza$ArticleText), ]# 1 obs 
+
+# add together 
+vegan_pizza <- rbind(vegan_pizza, Pizzagrønt, pomodori, il_fornaio) # 44 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, vegan_pizza) # 1813 obs 
+
+# clean up environment 
+rm(pizza, pizza_unique,  vegan_pizza, Pizzagrønt, il_fornaio)  
+
+```
+
+```{r pb_quinoasalat}
+quinoasalat <- sales_data[grep("Quinoasalat", sales_data$ArticleText), ] # 70 obs (2 unique)
+
+# split away pb_options 
+Sprød <- quinoasalat[grep("Sprød", quinoasalat$ArticleText), ] # 61 obs 
+
+# split away from quinoa meat options 
+quinoasalat <- anti_join(quinoasalat, Sprød) # 9 obs 
+
+# add to relevant categories 
+pb_readymeals <- rbind(pb_readymeals, Sprød) # 1874 
+n_meat <- rbind(n_meat, quinoasalat)
+
+# clean environment 
+rm(quinoasalat, Sprød)
+```
+
+```{r pb_risotto}
+risotto <- sales_data[grep("Risotto", sales_data$ArticleText), ] # 772 
+
+# get the pland based alternatives 
+Trevijano <- risotto[grep("Trevijano", risotto$ArticleText), ] # 55 obs (all vegan)
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, Trevijano) # 1929 obs 
+
+# clean environment 
+rm(risotto, Trevijano)
+
+```
+
+```{r salads}
+# get the salads stored as "ready meals" 
+faerdigretter <- sales_data %>% subset(PgText == "Færdigretter (110)")
+salat <- faerdigretter[grep("Salat", faerdigretter$ArticleText), ] # 4334 
+salad <- faerdigretter[grep("Salad", faerdigretter$ArticleText), ]# 156 obs 
+salad_small <- faerdigretter[grep("salat", faerdigretter$ArticleText), ] # 8174
+
+# add together 
+salad <- rbind(salat, salad, salad_small) # 12664
+salad_unique <- salad %>% distinct(ArticleText, .keep_all = T) # 162 obs 
+
+# find the ones which are clearly a plant based option (i.e., not normal plantbased salad)
+falafel <- salad[grep("Salat m/Falafel", salad$ArticleText), ] # 155 obs 
+eksotiske <- salad[grep("Cous-Cous Salat m/Basilikum", salad$ArticleText), ] # 4 obs 
+eksotiske2 <- salad[grep("Delikata Couscous Salat", salad$ArticleText), ] # 3 obs 
+Bønnelykken <- salad[grep("Bønnelykken", salad$ArticleText), ] # 81 obs 
+lidl_mexicana <- salad[grep("Saladinettes Salat Mexicana", salad$ArticleText), ] # 144 obs 
+pb_ceaser <- salad[grep("Saba Frukt", salad$ArticleText), ] # 2 obs 
+pb_kålsalad <- salad[grep("Grønkålssalat m/Quinoa", salad$ArticleText), ] #28 obs 
+pb_kålsalad2 <- salad[grep("Rødkålssalat m/Balsamico", salad$ArticleText), ] # 2 obs 
+
+# extract cheese salad from Bønnelykken
+Bønnelykken_cheese <- Bønnelykken[grep("Cheese", Bønnelykken$ArticleText), ] # 18 obs 
+Bønnelykken <- anti_join(Bønnelykken, Bønnelykken_cheese) # 63 obs 
+
+# add plant-based salads together 
+pb_salad <- rbind(falafel, eksotiske, eksotiske2, Bønnelykken, lidl_mexicana,
+                  pb_ceaser, pb_kålsalad, pb_kålsalad2) # 369 obs
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, pb_salad) # 2893 obs 
+
+# clean up environment 
+rm(salat, salad, salad_unique, falafel, eksotiske, eksotiske2, Bønnelykken, 
+   lidl_mexicana, pb_salad, Bønnelykken_cheese, pb_ceaser, pb_kålsalad, 
+   pb_kålsalad2, salad_small)
+
+```
+
+```{r various_readymeals}
+Grönt <- sales_data[grep("Grönt", sales_data$ArticleText), ] # 2 obs (vegan cesar salad)
+tofu_ravioli <- sales_data[grep("Ravioli Tofu", sales_data$ArticleText), ] # 2 
+gestus_pasta <- sales_data[grep("Gestus Pastapenne m/Grøntsager", sales_data$ArticleText),]#1
+MaeJin <- sales_data[grep("Tom Kha Vegetable&Coconut Suppe", sales_data$ArticleText),] # 2 obs
+snack_pot <- sales_data[grep("Snack Pot Veggie Mexican", sales_data$ArticleText),] # 2 obs 
+cup_noodles <- sales_data[grep("Nudelsuppe Veggie", sales_data$ArticleText),] # 3 obs 
+vego_chilli <- sales_data[grep("Vego Chilli Sin Carne", sales_data$ArticleText),] # 9 obs
+vego_bites <- sales_data[grep("Vego Bites", sales_data$ArticleText), ] # 7 obs
+
+# add together miscellaneous 
+pb_misc <- rbind(Grönt, tofu_ravioli, gestus_pasta, MaeJin, snack_pot, cup_noodles,
+                 vego_chilli, vego_bites) # 28 obs 
+
+# add to pb_readymeals 
+pb_readymeals <- rbind(pb_readymeals, pb_misc)  #2921 
+
+# clean up environment 
+rm(Grönt, tofu_ravioli, gestus_pasta, MaeJin, snack_pot, cup_noodles,vego_chilli, 
+   vego_bites, pb_misc)
+
+```
+
+-- Check using ready meal categories -- 
+```{r cheak_ready_meals}
+# delete duplicates from pb_readymeals 
+pb_readymeals_unique <- pb_readymeals %>% distinct() # 2449 
+
+ready_meals <- sales_data %>% subset(PgText == "Færdigretter (110)") # 53,514 obs 
+canned_dinners <- sales_data %>% subset(PgText == "Middagsretter på dåse (110)") #991 obs 
+
+# add the two into one dataframe 
+ready_meals <- rbind(ready_meals, canned_dinners) # 53,505 
+
+# split away the already found products 
+ready_meals <- anti_join(ready_meals, pb_readymeals_unique) # ready meals (51,501) 
+ready_meals <- anti_join(ready_meals, pb_meat_unique) # meat (50,598) 
+
+# Conduct some searches 
+# nb: searches conducted to ensure curry products were plant-based 
+plant <- ready_meals[grep("Plant", ready_meals$ArticleText),] # 0 obs 
+vegan <- ready_meals[grep("Veg", ready_meals$ArticleText),] # 13 obs 
+Grød <- ready_meals[grep("Grød", ready_meals$ArticleText),] # 3 obs 
+mrs_chengs <- ready_meals[grep("Mrs Cheng", ready_meals$ArticleText),] # 1 
+one_pot_veggie <- ready_meals[grep("OnePot Red Curry", ready_meals$ArticleText),] # 9 obs 
+one_pot_masala <- ready_meals[grep("OnePot Tikkas Masala", ready_meals$ArticleText),] # 20 obs
+soyahak <- ready_meals[grep("Sojahak", ready_meals$ArticleText),] # 2 obs 
+vitasia_satay <- ready_meals[grep("Vitasia Thai Nudelret m/Satay Sauce",
+                                  ready_meals$ArticleText),] # 4 obs 
+vitasia_sweet <- ready_meals[grep("Nudelret m/Sursød Sauce",
+                                  ready_meals$ArticleText),] # 3 obs 
+vitasia_green <- ready_meals[grep("Nudelret m/Grøn Karrysauce",
+                                  ready_meals$ArticleText),] # 2 obs
+vitasia_thai <- ready_meals[grep("Vitasia Thai Nudelret 330 gr",
+                                  ready_meals$ArticleText),] # 3 obs 
+
+# Split categories where necessary 
+# -- Vegan -- 
+vegan_meat  <- vegan[grep("Balls", vegan$ArticleText),] # 6 obs 
+vegan_rm <- vegan[grep("Pulver", vegan$ArticleText),] # 7 obs 
+
+# add to relevant categories 
+pb_meat_unique <- rbind(pb_meat_unique, vegan_meat) %>% distinct() # 3194
+
+pb_readymeals <- rbind(pb_readymeals, vegan_rm, Grød, mrs_chengs,
+                              one_pot_masala, one_pot_veggie, soyahak, vitasia_satay, 
+                              vitasia_green, vitasia_sweet, vitasia_thai)
+
+
+# clean up environment 
+rm(vegan_meat, vegan, ready_meals, canned_dinners, ready_meals_unique, vegan_rm, Grød, mrs_chengs,one_pot_masala, one_pot_veggie, soyahak, vitasia_satay, vitasia_green, vitasia_sweet, vitasia_thai)
+```
+
+```{r save_pb_readymeals}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_readymeals_unique <- pb_readymeals %>% distinct() # 2,449 obs 
+
+# save 
+write.csv(pb_readymeals_unique, "data/categorized_sales/pb_readymeals.csv", row.names = F)
+```
+
+# Confectionary 
+GFK confectionary categories = 004 (Chips and Snacks), 028 (Cookies), 034 (Cakes), 038 (Toppings and chocolate spread), 102 (Ris Snacks), 105 (Chocolate), 117 (Pastilles), 116 (Candy), 118 (Chewing Gum), 120 (Cakemix and Bread mixes). 
+
+In the confectionery section, we are looking for products which are specifically marketed as plant-based, to ensure that we are catching sales where it's possible the choice was intentional. This is in recognition that many confectionery items are naturally plant-based but that many also have hidden products within, which has led to this marketing of the products. The one exception here is 'dark chocolate' over 70%, which is rarely marketed as vegan but a common plant-based choice. 
+
+```{r chips_and_chisps}
+chips <- sales_data %>% subset(PgText == "Chips og Snacks (004)") #93k 
+chips_unique <- chips %>% distinct(ArticleText, .keep_all = T)  #857 
+
+# look for plant-based marketed products (as marketed on packaging & within supermarket)
+Linsechips <- chips[grep("Linse", chips$ArticleText),] # 275 obs 
+pea_snacks <- chips[grep("Pea Snack", chips$ArticleText),] # 16 obs 
+veg_chips <- chips[grep("Veg Chips", chips$ArticleText),] # 18 obs 
+biogan_vegan <- chips[grep("Biogan", chips$ArticleText),] # 7 obs 
+rootfruit <- chips[grep("Rootfruit", chips$ArticleText),] # 7 obs 
+Rodfrugt_chips <- chips[grep("Rodfrugt", chips$ArticleText),] # 26 obs 
+Popco <- chips[grep("Popco", chips$ArticleText),] # 4411 obs
+urtekram_majs <- chips[grep("Urtekram Popmajs", chips$ArticleText),] # 20 obs 
+
+# add together 
+pb_snacks <- rbind(Linsechips, pea_snacks, veg_chips, biogan_vegan, rootfruit, 
+                   Rodfrugt_chips, Popco, urtekram_majs) # 4790 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, pb_snacks) # 9931obs 
+
+# clean up environment 
+rm(chips, chips_unique, Linsechips, pea_snacks, veg_chips, biogan_vegan, rootfruit, 
+   Rodfrugt_chips, Popco, urtekram_majs, pb_snacks)
+```
+
+```{r cookies}
+cookies <- sales_data %>% subset(PgText == "Småkager (028)") # 33k 
+cookies_unique <- cookies %>% distinct(ArticleText, .keep_all = T) 
+
+# No obvious plant-based alternatives so passing by 
+rm(cookies, cookies_unique)
+```
+
+```{r cutting_cakes}
+cutting_cake <- sales_data %>% subset(PgText == "Skærekager og Roulader (034)") 
+cutting_cake_unique <- cutting_cake %>% distinct(ArticleText, .keep_all = T) 
+
+# plant based 
+almondy_choc <- cutting_cake[grep("Almondy Chokoladekage", cutting_cake$ArticleText),] #3obs
+honninhkage <- cutting_cake[grep("Urtekram Honningkage", cutting_cake$ArticleText),] # 12 obs
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, almondy_choc, honninhkage)
+  	
+# clean environment 
+rm(cutting_cake, cutting_cake_unique, almondy_choc, honninhkage)
+
+```
+
+```{r toppings_choc_spread}
+toppings <- sales_data %>% subset(PgText == "Pålæg- og Smørechokolade (038)") # 17k
+toppings_unique <- toppings %>% distinct(ArticleText, .keep_all = T) # 193 
+
+# Look for plant based 
+naturli <- toppings[grep("Naturli", toppings$ArticleText),] # 15 obs 
+Nocciolata <- toppings[grep("Nocciolata", toppings$ArticleText),] # 7 obs 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, naturli, Nocciolata)
+
+# clean environment 
+rm(toppings, toppings_unique, naturli, Nocciolata)
+```
+
+```{r rice_snacks}
+rice_snacks <- sales_data %>% subset(PgText == "Ris snacks (102)") # 10 (not plant based)
+
+# clean from environment 
+rm(rice_snacks)
+```
+
+```{r chocolate}
+chocolate <- sales_data[grep("Chocolate", sales_data$ArticleText), ] # 3133 
+chokolade <- sales_data[grep("Chokolade", sales_data$ArticleText), ] # 35k 
+
+# add together 
+chocolate <- rbind(chocolate, chokolade)  #38k 
+chocolate_unique <- chocolate %>% distinct(ArticleText, .keep_all = T) #804 
+
+# Look for plant-based products 
+vegan_choc <- chocolate[grep("Vegan", chocolate$ArticleText),] # 0 
+dark_choc <- chocolate[grep("Mørk", chocolate$ArticleText),] # 5120 obs 
+
+# add to pb_confectionary 
+pb_confectionery <- rbind(pb_confectionery, dark_choc) # 5151 
+
+# clean up environment
+rm(chocolate, chokolade, vegan_choc, dark_choc)
+```
+
+```{r pastilles}
+pastilles <- sales_data %>% subset(PgText == "Pastiller (117)") # 18589 
+pastilles_unique <- pastilles %>% distinct(ArticleText, .keep_all = T) # 249 
+
+# look for plant based products 
+Katjes <- pastilles[grep("Katjes", pastilles$ArticleText),] # 713 obs (vegan brand
+Coala <- pastilles[grep("Coala's Naturprodukter", pastilles$ArticleText),] # 9 obs 
+Natur_Drogeriet <- pastilles[grep("Natur Drogeriet", pastilles$ArticleText),] # 1 obs 
+Sencha_Naturals <- pastilles[grep("Sencha Naturals", pastilles$ArticleText),] # 2 obs 
+
+# add together 
+pb_pastilles <- rbind(Katjes, Coala, Natur_Drogeriet, Sencha_Naturals) # 752obs 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, pb_pastilles)
+
+# clean up environment
+rm(pastilles, pastilles_unique, Katjes, Coala, Natur_Drogeriet, Sencha_Naturals, pb_pastilles)
+
+```
+
+```{r slik}
+slik <- sales_data %>% subset(PgText == "Slik (116)") #90k
+slik_unique <- slik %>% distinct(ArticleText, .keep_all = T) #1827 
+
+# look for plant based alternatives 
+Katjes <- slik[grep("Katjes", slik$ArticleText),] # 3647 
+Biogan <- slik[grep("Biogan", slik$ArticleText),] # 2 obs 
+skittles <- slik[grep("Skittles", slik$ArticleText),] # 40 obs 
+tutti_frutti <- slik[grep("Fazer Group Tutti", slik$ArticleText),] # 10 obs 
+wally_and_wiz <- sales_data[grep("Wally", sales_data$ArticleText),] # 1 obs 
+
+# add together 
+pb_slik <- rbind(Katjes, Biogan, skittles, tutti_frutti, wally_and_wiz) #3699 obs 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, pb_slik) # 13,630
+
+# clean environment 
+rm(slik, slik_unique, Katjes, Biogan, skittles, tutti_frutti, pb_slik, wally_and_wiz)
+```
+
+```{r chewing_gum}
+gum <- sales_data %>% subset(PgText == "Tyggegummi (118)") #8746 
+gum_unique <- gum %>% distinct(ArticleText, .keep_all = T) # 170 
+
+# Find plant based 
+Natur_Drogeriet <- gum[grep("Natur Drogeriet", gum$ArticleText),] # 11 obs 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, Natur_Drogeriet)
+
+# clean up environment 
+rm(gum, gum_unique, Natur_Drogeriet)
+```
+
+```{r cakemixes}
+cake_mix <- sales_data %>% subset(PgText == "Kagemix og Brødblandinger (120)") # 11k 
+cake_mix_unique <- cake_mix %>% distinct(ArticleText, .keep_all = T) # 309 
+
+# look for plant based 
+Credin <- cake_mix[grep("Credin", cake_mix$ArticleText),] # 2 obs 
+Funksjonell_Mat  <- cake_mix[grep("Funksjonell Mat", cake_mix$ArticleText),] # 26 obs 
+Tjois <- cake_mix[grep("Tjois", cake_mix$ArticleText),] # 6 obs 
+cookiedej <- cake_mix[grep("Tim's Cookiedej", cake_mix$ArticleText),] # 4 obs 
+
+# Add together 
+pb_cakemix <- rbind(Credin, Funksjonell_Mat, Tjois, cookiedej)  #38 obs 
+
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, pb_cakemix)
+
+# clean up environment 
+rm(cake_mix, cake_mix_unique, Credin, Funksjonell_Mat, Tjois, cookiedej, pb_cakemix)
+```
+
+-- Extra confectionary snack products -- 
+```{r bars_and_biscuits}
+# here we'll look for musli type bars and snacks 
+bars <- sales_data[grep("Bar", sales_data$ArticleText),] #20574 
+müslibar <- sales_data[grep("Müslibar", sales_data$ArticleText),] # 7906 
+snitte <- sales_data[grep("snitte", sales_data$ArticleText),]
+
+biscuits <- sales_data %>% subset(PgText == "Småkager (028)") #34k 
+biscuit_category <- sales_data %>% subset(PgText == "Bisquits og Kiks (023)") #65k 
+
+# add them together 
+bars <- rbind(bars, müslibar, snitte, biscuit_category, biscuits) %>% distinct() # 124k 
+bars_unique <- bars %>% distinct(ArticleText, .keep_all = T)# 1805 obs 
+
+# Find the plant based products 
+Nakd <- bars[grep("Nakd", bars$ArticleText),] # 73 obs 
+madame_butterfly <- bars[grep("Madame Butterfly Müslikiks", bars$ArticleText),] # 117 obs 
+madame_butterfly2 <- bars[grep("Butterfly Chocolate Chip", bars$ArticleText),] # 76 
+madame_butterfly3 <- bars[grep("Butterfly Fuldkornskiks", bars$ArticleText),] # 224 
+vemondo <- bars[grep("Vemondo", bars$ArticleText),] # 2 obs 
+raw_bar <- bars[grep("Raw Bar", bars$ArticleText),] # 34 obs 
+Rawsome <- bars[grep("Rawsome", bars$ArticleText),] # 2 obs 
+rawbite <- bars[grep("Rawbite", bars$ArticleText),] # 151 
+sweet_n_raw <- bars[grep("Sweet n´Raw", bars$ArticleText),] # 17 obs 
+
+# add together 
+pb_bars <- rbind(Nakd, madame_butterfly, madame_butterfly2, madame_butterfly3,
+                 vemondo, raw_bar, Rawsome, rawbite, sweet_n_raw) # 696 obs 
+  
+# add to pb_confectionery 
+pb_confectionery <- rbind(pb_confectionery, pb_bars) # 14k 
+
+# clean up environment 
+rm(bars, müslibar, snitte, biscuit_category, biscuits, Nakd, madame_butterfly, madame_butterfly2, madame_butterfly3, vemondo, raw_bar, Rawsome, rawbite, 
+   sweet_n_raw, pb_bars, bars_unique)
+```
+
+Remove Duplicates and save 
+```{r save_pb_confectionery}
+# ensure there are no duplicates within to get a true idea no of products 
+pb_confectionery_unique <- pb_confectionery %>% distinct() # 15,081 obs 
+
+# save 
+write.csv(pb_confectionery_unique, "data/categorized_sales/pb_confectionery.csv", 
+          row.names = F)
+```
+
+#### create a dataframe of all the plant-based sales
+```{r all_plantbased_sales}
+# -- Add a category column to each -- 
+pb_dairy_unique$HMM_Category <- "Dairy"
+pb_meat_unique$HMM_Category <- "Meat"
+pb_eggs_unique$HMM_Category <- "Eggs"
+pb_seafood$HMM_Category <- "Seafood"
+pb_readymeals_unique$HMM_Category <- "Ready-Meal"
+pb_confectionery_unique$HMM_Category <- "Confectionery"
+
+# add all the data frames together into one 
+categorised_data <- rbind(pb_dairy_unique, pb_meat_unique, pb_eggs_unique,
+                          pb_seafood, pb_readymeals_unique, pb_confectionery_unique) # 41k
+
+# save as csv
+write.csv(categorised_data, "data/categorized_sales/categorised_data.csv")
+
+# Create plot with overview of sales across categories 
+categorised_data %>% group_by(HMM_Category) %>% 
+  ggplot(aes(x = HMM_Category, fill = HMM_Category)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Plant-Based Products by Category", 
+       x = "Category", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+
+```
+
+# Part 3: Ensure Households are not Vegan
+Through this study, we're interested in how people following a non-plant-based diet are willing to adopt plant-based products. Therefore, we want to ensure all households are also purchasing non-plant-based products in each time period, thereby ruling out the possibility that they have chosen to follow a permanent plant-based (Vegan) diet. 
+
+First, we'll gather all the dairy, meat, and egg products into dataframes: 
+-- Dairy -- 
+This category has been saved while finding plant based products, so we just need to delete duplicates and ensure there are no plant-based products which have sneeked in:
+```{r n_dairy}
+# First delete any duplicates 
+n_dairy <- n_dairy %>% distinct() # 1105,942 obs
+
+# Remove any plany-based products found within 
+n_dairy <- anti_join(n_dairy, pb_dairy_unique) # 1102,349obs 
+
+#save 
+write.csv(n_dairy, "data/categorized_sales/npb_dairy.csv", row.names = F)
+```
+
+-- Meat -- 
+The meat category is not as easy to assign throughout because it also contains products which are not meat, but not completely plant-based. Thus we'll add to the existing frame by looking for raw meat products we know belong in n_meat: 
+```{r n_meat}
+# First remove duplicates from n_meat to get an idea of how many products we have: 
+n_meat <- n_meat %>% distinct() #12,137 
+
+# Then we'll look into a raw meat category 
+# -- Kød -- 
+kod <- sales_data %>% subset(PgText == "Kød ej. Fisk og fjerkræ (052)") #120,401  
+kod <- anti_join(kod, pb_meat_unique) # 120,401 
+kod_unique <- kod %>% distinct(ArticleText, .keep_all = T) # all meat products 
+n_meat <- rbind(n_meat, kod) # 132,538 obs 
+
+# -- Pate and Bacon -- 
+bacon <-  sales_data %>% subset(PgText == "Pate og Bacon (049)") # 47048 
+bacon <- anti_join(bacon, pb_meat_unique) # 46999 obs 
+bacon_unique <- bacon %>% distinct(ArticleText, .keep_all = T) # 298 (all meat products)
+n_meat <- rbind(n_meat, bacon) # 179,537
+
+# -- Chicken -- 
+chicken <- sales_data %>% subset(PgText == "Kylling og Fjerkræ (031)") # 53785 
+chicken <- anti_join(chicken, pb_meat_unique) # 53,785 
+chicken_unique <- chicken %>% distinct(ArticleText, .keep_all = T) # all chicken 
+n_meat <- rbind(n_meat, chicken) # 233,322
+
+# -- Liverpostej -- 
+liverpostej <- sales_data %>% subset(PgText == "Leverpostej (048)") # 51435obs 
+liverpostej <- anti_join(liverpostej, pb_meat_unique) # 51318 
+liverpostej_unique <- liverpostej %>% distinct(ArticleText, .keep_all = T) # all meat 
+n_meat <- rbind(n_meat, liverpostej) # 284,640 obs 
+
+# -- Sausages -- 
+sausages <- sales_data %>% subset(PgText == "Pølser (053)") # 46,046 
+sausages <- anti_join(sausages, pb_meat) # 45978 
+sausages_unique <- sausages %>% distinct(ArticleText, .keep_all = T) # 632 (all meat)
+n_meat <- rbind(n_meat, sausages) # 330618 
+
+# -- Cold meat Cuts -- 
+cold_meats <- sales_data %>% subset(PgText == "Kødpålæg (054)") #222915 
+cold_meats <- anti_join(cold_meats, pb_meat) # 221732 
+cold_meats_unique <- cold_meats %>% distinct(ArticleText, .keep_all = T) # 1670 (all meat)
+n_meat <- rbind(n_meat, cold_meats) # 552350 
+
+# Final check there are no plant based products in n_meat 
+n_meat <- anti_join(n_meat, pb_meat) # 552233 obs 
+
+#save 
+write.csv(n_meat, "data/categorized_sales/npb_meat.csv", row.names = F)
+
+# clean up environment 
+rm(kod, kod_unique, chicken, chicken_unique, bacon, bacon_unique, liverpostej, 
+   liverpostej_unique, sausages, sausages_unique, cold_meats, cold_meats_unique)
+```
+
+-- Eggs -- 
+The egg category does not contain so many products, so here we'll just look for purchases of eggs themselves, non_plant_based mayonnaise, and egg_based fresh pasta (not dried pasta)
+```{r n_eggs}
+# Remove duplicates within n_eggs 
+n_eggs <- n_eggs %>% distinct() # 86,137 
+
+# -- Mayonnaise -- 
+mayo <- sales_data[grep("Mayo", sales_data$ArticleText),] # 28375 
+mayo <- anti_join(mayo, pb_eggs) # 28168 
+mayo_unique <- mayo %>% distinct(ArticleText, .keep_all = T) #98 
+
+# extract the vegan ones 
+vegan_mayo1 <- mayo[grep("Vegan", mayo$ArticleText),] # 1 obs 
+vegan_mayo2 <- mayo[grep("Naturata", mayo$ArticleText),] # 1 obs 
+vegan_mayo3 <- mayo[grep("Naturli", mayo$ArticleText),] # 135 obs 
+vegan_mayos <- rbind(vegan_mayo1, vegan_mayo2, vegan_mayo3) # 137 Bind together 
+vegan_mayos$HMM_Category <- "Eggs"         # add Category column 
+pb_eggs_unique <- rbind(pb_eggs_unique, vegan_mayos) # add to pb_eggs_unique 
+write.csv(pb_eggs_unique, "data/categorized_sales/pb_eggs.csv", row.names = F) # rewrite 
+
+# add non-vegans to dataframe 
+mayo <- anti_join(mayo, vegan_mayos) # 28238 
+n_eggs <- rbind(n_eggs, mayo) # 114375 
+
+# -- Fresh Pasta -- 
+# From categories 
+Spaghetti <- sales_data %>% subset(PgText == "Spaghetti (035)") # 34017 
+pasta_category <- sales_data %>% subset(PgText == "Pasta- og Risretter (056)") # 11880 
+
+# some searches 
+Fettuccine <- sales_data[grep("Fettuccine", sales_data$ArticleText), ] # 4965 
+Penne <- sales_data[grep("Penne", sales_data$ArticleText), ] # 1816 obs 
+
+# bind together and delete duplicates 
+pasta <- rbind(Spaghetti, pasta_category, Fettuccine, Penne, gnocchi) %>% distinct() # 46138
+pasta <- anti_join(pasta, pb_eggs) # 46129 
+
+# Look for plant based alternatives 
+pastella <- pasta[grep("Pastella", pasta$ArticleText),] # 3173 
+lasagne_fresh <- pasta[grep("Lasagne Frisk", pasta$ArticleText),] # 397 
+Æg_products <- pasta[grep("Æg", pasta$ArticleText),] # 509 
+
+# add fresh pasta together 
+fresh_pasta <- rbind(pastella, lasagne_fresh, Æg_products) # 4079 obs 
+
+# add to n_eggs
+n_eggs <- rbind(n_eggs, fresh_pasta) # 118454 
+
+# save 
+write.csv(n_eggs, "data/categorized_sales/npb_eggs.csv")
+  
+# clean up environment 
+rm(mayo, mayo_unique, vegan_mayo1, vegan_mayo2, vegan_mayo3, vegan_mayos, Spaghetti,
+   pasta_category, Fettuccine, Penne, pasta, pastella, lasagne_fresh, Æg_products,
+   fresh_pasta)
+```
+
+```{r clean_up_environment}
+rm(chocolate_unique, faerdigretter, gnocchi, Grøntsagsssuppe, lasagne, n_spreads, pb_fish, 
+   plant, pomodori, tikka_masala, tune_free, Urtekram, Urtekram_pb_cream, vegetal, veggie)
+```
+
+
+## Ensure Households are not plant-based buyers only 
+First, we'll look for households which have not bought meat products: A non-meat eating households is defined if they have less than 27 purchases across the 3 years. This would be less than 3 purchases of meat every period. 
+
+-- Meat -- 
+```{r non_meat eaters}
+# -- Households -- 
+households <- sales_data %>% distinct(hhnr)
+
+# -- Time Periods --
+# -- 2018 -- 
+P1_meat <- n_meat[n_meat$date >= "2018-01-01" & n_meat$date <= "2018-06-30", ] # 70777
+P2_meat <- n_meat[n_meat$date >= "2018-07-01" & n_meat$date <= "2018-12-31", ] # 67680
+
+# -- 2019 -- 
+P3_meat <- n_meat[n_meat$date >= "2019-01-01" & n_meat$date <= "2019-06-30", ] # 62344 
+P4_meat <- n_meat[n_meat$date >= "2019-07-01" & n_meat$date <= "2019-12-31", ] # 55770
+
+# -- 2020 -- 
+P5_meat <- n_meat[n_meat$date >= "2020-01-01" & n_meat$date <= "2020-06-30", ] # 55890
+P6_meat <- n_meat[n_meat$date >= "2020-07-01" & n_meat$date <= "2020-12-31", ] # 51399
+
+# -- 2021 -- 
+P7_meat <- n_meat[n_meat$date >= "2021-01-01" & n_meat$date <= "2021-06-30", ] # 40087
+P8_meat <- n_meat[n_meat$date >= "2021-07-01" & n_meat$date <= "2021-12-31", ] # 34358 
+
+
+# -- Count the purchases -- 
+P1_meat_hhnrs <- count_purchases(P1_meat) # 1159 
+P2_meat_hhnrs <- count_purchases(P2_meat) # 1160
+P3_meat_hhnrs <- count_purchases(P3_meat) # 1155 
+P4_meat_hhnrs <- count_purchases(P4_meat) # 1155
+P5_meat_hhnrs <- count_purchases(P5_meat) # 1153
+P6_meat_hhnrs <- count_purchases(P6_meat) # 1157
+P7_meat_hhnrs <- count_purchases(P7_meat) # 1148 
+P8_meat_hhnrs <- count_purchases(P8_meat) # 1127 
+
+# -- Code Meat Purchaes -- 
+# -- 2018 -- 
+households$Meat_P1 <- P1_meat_hhnrs$purchases[match(households$hhnr, P1_meat_hhnrs$hhnr)]
+households$Meat_P2 <- P2_meat_hhnrs$purchases[match(households$hhnr, P2_meat_hhnrs$hhnr)]
+
+# -- 2019 -- 
+households$Meat_P3 <- P3_meat_hhnrs$purchases[match(households$hhnr, P3_meat_hhnrs$hhnr)]
+households$Meat_P4 <- P4_meat_hhnrs$purchases[match(households$hhnr, P4_meat_hhnrs$hhnr)]
+
+# --2020-- 
+households$Meat_P5 <- P5_meat_hhnrs$purchases[match(households$hhnr, P5_meat_hhnrs$hhnr)]
+households$Meat_P6 <- P6_meat_hhnrs$purchases[match(households$hhnr, P6_meat_hhnrs$hhnr)]
+
+# -- 2021 -- 
+households$Meat_P7 <- P7_meat_hhnrs$purchases[match(households$hhnr, P7_meat_hhnrs$hhnr)]
+households$Meat_P8 <- P8_meat_hhnrs$purchases[match(households$hhnr, P8_meat_hhnrs$hhnr)]
+
+# Get an overview of the missing data 
+households[is.na(households)] <- 0 # convert NAs to 0 
+households$Meat_2018 <- households$Meat_P1 + households$Meat_P2
+households$Meat_2019 <- households$Meat_P3 + households$Meat_P4
+households$Meat_2020 <- households$Meat_P5 + households$Meat_P6
+households$Meat_2021 <- households$Meat_P7 + households$Meat_P8
+
+# Get total purchases across the 3 years 
+households$Meat_Total <- households$Meat_2018 + households$Meat_2019 + 
+                         households$Meat_2020 + households$Meat_2021
+
+# Find households where very little meat has been bought 
+sum(households$Meat_Total < 16) # This would be less than 2 meat purchases per period 
+non_meateaters <- households %>% subset(households$Meat_Total < 16)
+
+# remove non-meat eaters from the dataframe 
+households <- anti_join(households, non_meateaters) # 1159 households 
+
+# cut dataframe to include only purchases by year 
+households <- households %>% select(hhnr, Meat_2018, Meat_2019, Meat_2020, 
+                                    Meat_2021, Meat_Total)
+
+# clean up environment 
+rm(P1_meat, P1_meat_hhnrs, P2_meat, P2_meat_hhnrs, P3_meat, P3_meat_hhnrs, P4_meat, 
+   P4_meat_hhnrs, P5_meat, P5_meat_hhnrs, P6_meat, P6_meat_hhnrs, P7_meat, P7_meat_hhnrs,
+   P8_meat, P8_meat_hhnrs)
+```
+
+Next, we'll take our households and ensure they are also consuming dairy products, hoping to filter out the households that buy plant-based products due to the likes of lactose intollerance etc:
+
+-- Dairy -- 
+```{r households_dairy}
+# -- Time Periods -- 
+# -- 2018 -- 
+P1_dairy <- n_dairy[n_dairy$date >= "2018-01-01" & n_dairy$date <= "2018-06-30", ] #125928
+P2_dairy <- n_dairy[n_dairy$date >= "2018-07-01" & n_dairy$date <= "2018-12-31", ] #121622
+
+# -- 2019 -- 
+P3_dairy <- n_dairy[n_dairy$date >= "2019-01-01" & n_dairy$date <= "2019-06-30", ] #112042
+P4_dairy <- n_dairy[n_dairy$date >= "2019-07-01" & n_dairy$date <= "2019-12-31", ] #112042
+
+# -- 2020 -- 
+P5_dairy <- n_dairy[n_dairy$date >= "2020-01-01" & n_dairy$date <= "2020-06-30", ] #116306 
+P6_dairy <- n_dairy[n_dairy$date >= "2020-07-01" & n_dairy$date <= "2020-12-31", ] #110910 
+
+# -- 2021 -- 
+P7_dairy <- n_dairy[n_dairy$date >= "2021-01-01" & n_dairy$date <= "2021-06-30", ] # 97207 
+P8_dairy <- n_dairy[n_dairy$date >= "2021-07-01" & n_dairy$date <= "2021-12-31", ] # 85220 
+
+# -- Households with purchases -- 
+P1_dairy_hhnrs <- count_purchases(P1_dairy) # 1165 
+P2_dairy_hhnrs <- count_purchases(P2_dairy) # 1161 
+P3_dairy_hhnrs <- count_purchases(P3_dairy) # 1162 
+P4_dairy_hhnrs <- count_purchases(P4_dairy) # 1165
+P5_dairy_hhnrs <- count_purchases(P5_dairy) # 1166 
+P6_dairy_hhnrs <- count_purchases(P6_dairy) # 1167
+P7_dairy_hhnrs <- count_purchases(P7_dairy) # 1167 
+P8_dairy_hhnrs <- count_purchases(P8_dairy) # 1146 
+
+# -- Code Dairy Purchaes -- 
+# -- 2018 -- 
+households$Dairy_P1 <- P1_dairy_hhnrs$purchases[match(households$hhnr, P1_dairy_hhnrs$hhnr)]
+households$Dairy_P2 <- P2_dairy_hhnrs$purchases[match(households$hhnr, P2_dairy_hhnrs$hhnr)]
+
+# -- 2019 -- 
+households$Dairy_P3 <- P3_dairy_hhnrs$purchases[match(households$hhnr, P3_dairy_hhnrs$hhnr)]
+households$Dairy_P4 <- P4_dairy_hhnrs$purchases[match(households$hhnr, P4_dairy_hhnrs$hhnr)]
+
+# -- 2020 -- 
+households$Dairy_P5 <- P5_dairy_hhnrs$purchases[match(households$hhnr, P5_dairy_hhnrs$hhnr)]
+households$Dairy_P6 <- P6_dairy_hhnrs$purchases[match(households$hhnr, P6_dairy_hhnrs$hhnr)]
+
+# -- 2021 -- 
+households$Dairy_P7 <- P7_dairy_hhnrs$purchases[match(households$hhnr, P7_dairy_hhnrs$hhnr)]
+households$Dairy_P8 <- P8_dairy_hhnrs$purchases[match(households$hhnr, P8_dairy_hhnrs$hhnr)]
+
+# Convert NAs to 0 and get the year's total  
+sum(is.na(households)) # 37 
+households[is.na(households)] <- 0
+households$Dairy_2018 <- households$Dairy_P1 + households$Dairy_P2
+households$Dairy_2019 <- households$Dairy_P3 + households$Dairy_P4
+households$Dairy_2020 <- households$Dairy_P5 + households$Dairy_P6
+households$Dairy_2021 <- households$Dairy_P7 + households$Dairy_P8
+
+# Create column to count total daory purchases across the 3 years 
+households$Dairy_Total <- households$Dairy_2018 +
+                          households$Dairy_2019 + 
+                          households$Dairy_2020 + 
+                          households$Dairy_2021
+
+# Look for households with less than 27 Dairy purchases 
+non_dairy_hhnr <- households %>% subset(Dairy_Total < 16) # 0 households 
+
+rm(P1_dairy, P1_dairy_hhnrs, P2_dairy, P2_dairy_hhnrs, P3_dairy, P3_dairy_hhnrs, P4_dairy, 
+   P4_dairy_hhnrs, P5_dairy, P5_dairy_hhnrs, P6_dairy, P6_dairy_hhnrs, P7_dairy,
+   P7_dairy_hhnrs, P8_dairy, P8_dairy_hhnrs) 
+
+# Cut households to include only columns of interest 
+households <- households %>% select(hhnr, Meat_2018, Meat_2019, Meat_2020, Meat_2021,
+                                    Meat_Total, Dairy_2018, Dairy_2019, Dairy_2020,
+                                    Dairy_2021, Dairy_Total)
+
+# Create a list of the included household numbers
+screened_households <- households %>% 
+  distinct(hhnr, .keep_all = T) %>%
+  select(hhnr, Meat_Total, Dairy_Total)
+
+# save 
+write.csv(screened_households, "data/households/households_included.csv")
+```
+
+-- Trim Data to Include only Households -- 
+```{r trim_data}
+# Trim away the data of excluded households 
+pb_dairy <- pb_dairy_unique[pb_dairy_unique$hhnr %in% screened_households$hhnr,] # lose 302
+pb_meat <- pb_meat_unique[pb_meat_unique$hhnr %in% screened_households$hhnr,] # lose 179
+pb_eggs <- pb_eggs_unique[pb_eggs_unique$hhnr %in% screened_households$hhnr,] # lose 11 
+pb_seafood <- pb_seafood_unique[pb_seafood_unique$hhnr %in% screened_households$hhnr,] #lose 1
+pb_readymeals  <- pb_readymeals_unique[pb_readymeals_unique$hhnr %in%
+                                         screened_households$hhnr, ] # lose 44 
+pb_confectionery <- pb_confectionery_unique[pb_confectionery_unique$hhnr %in%
+                                              screened_households$hhnr, ] # lose 95 
+
+# Re-save the data frames 
+write.csv(pb_dairy, "data/categorized_sales/pb_dairy.csv")
+write.csv(pb_meat, "data/categorized_sales/pb_meat.csv")
+write.csv(pb_eggs, "data/categorized_sales/pb_eggs.csv")
+write.csv(pb_seafood, "data/categorized_sales/pb_seafood.csv")
+write.csv(pb_confectionery, "data/categorized_sales/pb_confectionery.csv")
+
+# Add all together into one dataframe 
+pb_meat$HMM_Category <- "Meat"
+pb_seafood$HMM_Category <- "Seafood"
+
+categorised_data <- rbind(pb_dairy, pb_meat, pb_eggs, pb_seafood, 
+                          pb_readymeals, pb_confectionery)
+
+# save 
+write.csv(categorised_data, "data/categorized_sales/categorised_data.csv")
+```
+
+The sales data has now all been categorized and trimmed to include the households which meet the inclusion criteria. The next script "Coding_Categories.Rmd" will further process the data to make a record of whether a plant-based purchase has been made in each category for each time period. 
+
+
+```{r clean_up_environment }
+# -- clean up stray dataframes which will no longer be necessary -- 
+rm(irrelevant_products, n_dairy, n_eggs, n_meat, new_pb_confectionery, new_pb_dairy, 
+   new_pb_eggs, new_pb_meat, new_pb_ready_meals, new_pb_seafood, non_dairy_hhnr, 
+   non_meateaters, pb_confectionery_unique, pb_dairy_unique, pb_meat_unique, pb_eggs_unique,
+   pb_seafood_unique, pb_readymeals_unique)
+
+```

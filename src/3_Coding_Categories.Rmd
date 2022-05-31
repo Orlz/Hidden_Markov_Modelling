@@ -1,0 +1,609 @@
+---
+title: "Coding Categories"
+author: "Orla Mallon"
+date: "26/05/2022"
+output: html_document
+---
+
+This script takes the plant-based data files and codes them into a way the model is able to understand.
+
+## Setup 
+```{r setup}
+# -- working dircetory -- 
+setwd("~/Desktop/dev/Data_Science/")
+getwd()
+
+# -- dependencies -- 
+library(tidyverse, dplyr)
+library(ggplot2)
+
+# -- Load Data -- 
+pb_dairy <- read.csv("data/categorized_sales/pb_dairy.csv", colClasses="factor")
+pb_meat <- read.csv("data/categorized_sales/pb_meat.csv", colClasses="factor")
+pb_eggs <- read.csv("data/categorized_sales/pb_eggs.csv", colClasses="factor")
+pb_seafood <- read.csv("data/categorized_sales/pb_seafood.csv", colClasses="factor")
+pb_readymeals <- read.csv("data/categorized_sales/pb_readymeals.csv", colClasses="factor")
+pb_confectionery <- read.csv("data/categorized_sales/pb_confectionery.csv", colClasses="factor")
+```
+
+#### Fuctions 
+```{r functions}
+# -- Function to count purchases by household in a dataframe -- 
+count_purchases <- function(df) { 
+  counted_data <- df %>% group_by(hhnr) %>% 
+    mutate(purchases = n()) %>% 
+    distinct(hhnr, .keep_all = T) %>% 
+    select(hhnr, purchases)
+  return(counted_data)
+}
+
+# -- Function to rename columns for saving-- 
+# rename columns 
+rename_columns <- function(df){
+  new_df <- df %>% 
+    rename(
+      hhnr = 1,
+      Period_1 = 2,
+      Period_2 = 3, 
+      Period_3 = 4,
+      Period_4 = 5,
+      Period_5 = 6,
+      Period_6 = 7,
+      Period_7 = 8,
+      Period_8 = 9)
+  return(new_df)
+}
+```
+
+#### Pre-Visualisation of the Data:
+```{r viz}
+p1_all_years <- categorised_data %>% group_by(year) %>% 
+  ggplot(aes(x = year, fill = year)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Plant-Based Products by Year", 
+       x = "Year", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+p1_all_years
+
+p2_by_category <- pb_dairy %>% group_by(year) %>% 
+  ggplot(aes(x = year, fill = year)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Dairy Products by Year", 
+       x = "Year", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+p2_by_category
+
+p3_by_category <- pb_meat %>% group_by(year) %>% 
+  ggplot(aes(x = year, fill = year)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Meat Products by Year", 
+       x = "Year", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+p3_by_category
+
+p4_by_category <- pb_readymeals %>% group_by(year) %>% 
+  ggplot(aes(x = year, fill = year)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Ready Meal Products by Year", 
+       x = "Year", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+p4_by_category
+
+p5_by_category <- pb_confectionery %>% group_by(year) %>% 
+  ggplot(aes(x = year, fill = year)) + 
+  geom_bar() + 
+  theme_classic() + 
+  labs(title = "Sales of Confectionery Products by Year", 
+       x = "Year", y = "") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 14)) +
+  theme(legend.position="none") + 
+  scale_fill_brewer(palette="Spectral")
+p5_by_category
+
+```
+
+Due to the low number of sales in the 'pb_eggs' (262 obs) and 'pb_seafood' (31 obs), these two categories will be dropped from the rest of the analysis. This means we will be looking for purchases per household in the 'Dairy', 'Meat', 'Ready Meals' and 'Confectionery' columns. 
+
+In the below chunks,  the following steps are taken to code each household as either a purchase (1) or non purchase (0) for each category in each time step. 
+
+i)The category's sales files are cut into 6 month chuncks (Jan 18 - Dec 21)
+ii) The number of purchases for each household in each time chunk is calculated.
+iii) Append sales data onto a list of the household IDs (A non sale becomes an NA)
+iv) NA's are converted to 0's, and anything that is not 0 is converted to a 1 to reflect the household made a purchase. The volume of sales is disregarded. 
+v) Each category is checked to see how many households have purchased products in this category across the 4 years. 
+
+
+
+#### Dairy 
+```{r dairy_time_periods}
+# -- Step 1: Cut the data into 6 month chunks -- 
+
+# Make the Date column into a date column 
+pb_dairy$date <- as.Date(pb_dairy$date)
+
+# -- Time Periods -- 
+# -- 2018 -- 
+P1_dairy <- pb_dairy[pb_dairy$date >= "2018-01-01" & pb_dairy$date <= "2019-06-30",] # 7335 
+P2_dairy <- pb_dairy[pb_dairy$date >= "2018-07-01" & pb_dairy$date <= "2019-12-31",] # 6443
+
+# -- 2019 -- 
+P3_dairy <- pb_dairy[pb_dairy$date >= "2019-01-01" & pb_dairy$date <= "2019-06-30",] # 2273 
+P4_dairy <- pb_dairy[pb_dairy$date >= "2019-07-01" & pb_dairy$date <= "2019-12-31",] # 1637 
+
+# -- 2020 -- 
+P5_dairy <- pb_dairy[pb_dairy$date >= "2020-01-01" & pb_dairy$date <= "2020-06-30",] # 1837 
+P6_dairy <- pb_dairy[pb_dairy$date >= "2020-07-01" & pb_dairy$date <= "2020-12-31",] # 1797
+
+# -- 2021 -- 
+P7_dairy <- pb_dairy[pb_dairy$date >= "2021-01-01" & pb_dairy$date <= "2021-06-30",] # 1696 
+P8_dairy <- pb_dairy[pb_dairy$date >= "2021-07-01" & pb_dairy$date <= "2021-12-31",] # 1510 
+
+```
+
+```{r count_purchases}
+# -- Step 2: Count the pb_dairy purchases per household -- 
+P1_dairy <- count_purchases(P1_dairy) # 887 
+P2_dairy <- count_purchases(P2_dairy) # 848 
+P3_dairy <- count_purchases(P3_dairy) # 617 
+P4_dairy <- count_purchases(P4_dairy) # 374 
+P5_dairy <- count_purchases(P5_dairy) # 396
+P6_dairy <- count_purchases(P6_dairy) # 394
+P7_dairy <- count_purchases(P7_dairy) # 364
+P8_dairy <- count_purchases(P8_dairy) # 351 
+```
+
+```{r code_purchases}
+# -- Step 3: Match the sales data to the household -- 
+# Create a data frame to append the data into --  
+pb_households <- screened_households %>% distinct(hhnr)
+
+# --2018 -- 
+pb_households$Dairy_P1 <- P1_dairy$purchases[match(pb_households$hhnr,P1_dairy$hhnr)]
+pb_households$Dairy_P2 <- P2_dairy$purchases[match(pb_households$hhnr,P2_dairy$hhnr)]
+
+# -- 2019 -- 
+pb_households$Dairy_P3 <- P3_dairy$purchases[match(pb_households$hhnr,P3_dairy$hhnr)]
+pb_households$Dairy_P4 <- P4_dairy$purchases[match(pb_households$hhnr,P4_dairy$hhnr)]
+
+# -- 2020 -- 
+pb_households$Dairy_P5 <- P5_dairy$purchases[match(pb_households$hhnr,P5_dairy$hhnr)]
+pb_households$Dairy_P6 <- P6_dairy$purchases[match(pb_households$hhnr,P6_dairy$hhnr)]
+
+# --2021 -- 
+pb_households$Dairy_P7 <- P7_dairy$purchases[match(pb_households$hhnr,P7_dairy$hhnr)]
+pb_households$Dairy_P8 <- P7_dairy$purchases[match(pb_households$hhnr,P8_dairy$hhnr)]
+
+# -- Step 4: Convert NAs to 0 and everything else to 1 -- 
+# ensure NAs are 0s (this means no sale made)
+sum(is.na(pb_households)) # 5041
+pb_households[is.na(pb_households)] <- 0 
+
+# split the house numbers away 
+pb_household_split <- select(pb_households, -hhnr)
+hhnrs <- pb_households %>% select(hhnr)
+
+# set everything that isn't a 0 to 1 (meaning purchase made)
+pb_household_split[pb_household_split != 0] <- 1
+
+# bind the columns back together 
+pb_households <- cbind(hhnrs, pb_household_split)
+```
+
+```{r find_hhnrs_exclude}
+# -- Step 5: Check number of households who have made pb_dairy purchases -- 
+# -- Find households who made no pb_dairy purchases and exclude them from data -- pb_households <- pb_households %>% 
+  mutate(Total = select(., Dairy_P1:Dairy_P8) %>% rowSums(na.rm = TRUE))
+
+# -- Exclude households who made no purchases -- 
+excluded_dairy <- pb_households %>% subset(Total < 1) # 170 households 
+
+# Thus there are 989 active households for the dairy category. 
+```
+
+```{r clean_dairy}
+# clean up environment
+rm(P1_dairy, P2_dairy, P3_dairy, P4_dairy, P5_dairy, P6_dairy, P7_dairy, P8_dairy)
+
+```
+
+
+#### Meat 
+```{r meat_time_periods}
+# -- Step 1: Cut the data into 6 month chunks -- 
+# Make the Date column into a date column 
+pb_meat$date <- as.Date(pb_meat$date)
+
+# -- Time Periods --
+# -- 2018 -- 
+P1_meat <- pb_meat[pb_meat$date >= "2018-01-01" & pb_meat$date <= "2018-06-30",] # 445
+P2_meat <- pb_meat[pb_meat$date >= "2018-07-01" & pb_meat$date <= "2018-12-31",] # 313
+
+# -- 2019 -- 
+P3_meat <- pb_meat[pb_meat$date >= "2019-01-01" & pb_meat$date <= "2019-06-30",] # 412
+P4_meat <- pb_meat[pb_meat$date >= "2019-07-01" & pb_meat$date <= "2019-12-31",] # 358  
+ 
+# -- 2020 -- 
+P5_meat <- pb_meat[pb_meat$date >= "2020-01-01" & pb_meat$date <= "2020-06-30",] # 321 
+P6_meat <- pb_meat[pb_meat$date >= "2020-07-01" & pb_meat$date <= "2020-12-31",] # 279 
+
+# -- 2021 -- 
+P7_meat <- pb_meat[pb_meat$date >= "2021-01-01" & pb_meat$date <= "2021-06-30",] # 276 
+P8_meat <- pb_meat[pb_meat$date >= "2021-07-01" & pb_meat$date <= "2021-12-31",] # 231 
+
+```
+
+```{r count_purchases}
+# -- Step 2: Count the pb_meat purchases per household -- 
+P1_meat <- count_purchases(P1_meat) #184  
+P2_meat <- count_purchases(P2_meat) #147
+P3_meat <- count_purchases(P3_meat) #171
+P4_meat <- count_purchases(P4_meat) #148
+P5_meat <- count_purchases(P5_meat) #145
+P6_meat <- count_purchases(P6_meat) #136
+P7_meat <- count_purchases(P7_meat) #114
+P8_meat <- count_purchases(P8_meat) #104
+```
+
+```{r code_purchases}
+# -- Step 3: Match the sales data to the household -- 
+# Create dataframe to append data into 
+pbm_households <- screened_households %>% distinct(hhnr)
+
+# -- 2018 -- 
+pbm_households$Meat_P1 <- P1_meat$purchases[match(pbm_households$hhnr,P1_meat$hhnr)]
+pbm_households$Meat_P2 <- P2_meat$purchases[match(pbm_households$hhnr,P2_meat$hhnr)]
+
+# -- 2019 -- 
+pbm_households$Meat_P3 <- P3_meat$purchases[match(pbm_households$hhnr,P3_meat$hhnr)]
+pbm_households$Meat_P4 <- P4_meat$purchases[match(pbm_households$hhnr,P4_meat$hhnr)]
+
+# -- 2020 -- 
+pbm_households$Meat_P5 <- P5_meat$purchases[match(pbm_households$hhnr,P5_meat$hhnr)]
+pbm_households$Meat_P6 <- P6_meat$purchases[match(pbm_households$hhnr,P6_meat$hhnr)]
+
+# -- 2021 -- 
+pbm_households$Meat_P7 <- P7_meat$purchases[match(pbm_households$hhnr,P7_meat$hhnr)]
+pbm_households$Meat_P8 <- P8_meat$purchases[match(pbm_households$hhnr,P8_meat$hhnr)]
+
+# -- Code the purchases -- 
+# ensure NAs are 0s (this means no sale made)
+sum(is.na(pbm_households)) #8123 
+pbm_households[is.na(pbm_households)] <- 0 
+
+# split the house numbers away 
+pbm_household_split <- select(pbm_households, -hhnr)
+hhnrs_pbm <- pbm_households %>% select(hhnr)
+
+# set everything that isn't a 0 to 1 (meaning purchase made)
+pbm_household_split[pbm_household_split != 0] <- 1
+
+# bind the columns back together 
+pbm_households <- cbind(hhnrs_pbm, pbm_household_split)
+
+```
+
+```{r find_hhnrs_exclude}
+# -- Step 5: Check number of households who have made pb_meat purchases -- 
+# -- Find households who made no pb_meat purchases and exclude them from data -- 
+pbm_households <- pbm_households %>% 
+  mutate(Total = select(., Meat_P1:Meat_P8) %>% rowSums(na.rm = TRUE)) 
+
+# -- Exclude households who made no purchases -- 
+excluded_meat <- pbm_households %>% subset(Total < 1) # 673 households 
+
+# This leaves 673 households which meet the 'Meat category' 
+```
+
+```{r clean_meat}
+# clean up environment
+rm(P1_meat, P2_meat, P3_meat, P4_meat, P5_meat, P6_meat, P7_meat, P8_meat)
+```
+
+#### Ready Meals 
+
+```{r readymeal_time_periods}
+# -- Step 1: Cut the data into 6 month chunks -- 
+# Make the Date column into a date column 
+pb_readymeals$date <- as.Date(pb_readymeals$date)
+
+# -- Time Periods -- 
+# -- 2018 -- 
+P1_readymeals <- pb_readymeals[pb_readymeals$date >= "2018-01-01" & 
+                               pb_readymeals$date <= "2018-06-30",] # 356
+P2_readymeals <- pb_readymeals[pb_readymeals$date >= "2018-07-01" & 
+                               pb_readymeals$date <= "2018-12-31",] # 299  
+
+# -- 2019 -- 
+P3_readymeals <- pb_readymeals[pb_readymeals$date >= "2019-01-01" & 
+                               pb_readymeals$date <= "2019-06-30",] # 307  
+P4_readymeals <- pb_readymeals[pb_readymeals$date >= "2019-07-01" & 
+                               pb_readymeals$date <= "2019-12-31",] # 268 
+
+# -- 2020 -- 
+P5_readymeals <- pb_readymeals[pb_readymeals$date >= "2020-01-01" & 
+                               pb_readymeals$date <= "2020-06-30",] # 281 
+P6_readymeals <- pb_readymeals[pb_readymeals$date >= "2020-07-01" & 
+                               pb_readymeals$date <= "2020-12-31",] # 194 
+
+# -- 2021 -- 
+P7_readymeals <- pb_readymeals[pb_readymeals$date >= "2021-01-01" & 
+                               pb_readymeals$date <= "2021-06-30",] # 164 
+P8_readymeals <- pb_readymeals[pb_readymeals$date >= "2021-07-01" & 
+                               pb_readymeals$date <= "2021-12-31",] # 102 
+
+```
+
+```{r count_purchases}
+# -- Step 2: Count the pb_readymeals purchases per household -- 
+P1_readymeals <- count_purchases(P1_readymeals) #174  
+P2_readymeals <- count_purchases(P2_readymeals) #164
+P3_readymeals <- count_purchases(P3_readymeals) #183
+P4_readymeals <- count_purchases(P4_readymeals) #162
+P5_readymeals <- count_purchases(P5_readymeals) #145
+P6_readymeals <- count_purchases(P6_readymeals) #109
+P7_readymeals <- count_purchases(P7_readymeals) #95
+P8_readymeals <- count_purchases(P8_readymeals) #67
+```
+
+```{r code_purchases}
+# -- Step 3: Match the sales data to the household -- 
+# Create dataframe to append data into 
+pbr_households <- screened_households %>% distinct(hhnr)
+
+# -- 2018 -- 
+pbr_households$ReadyMeal_P1 <- P1_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P1_readymeals$hhnr)]
+pbr_households$ReadyMeal_P2 <- P2_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P2_readymeals$hhnr)]
+
+# -- 2019 -- 
+pbr_households$ReadyMeal_P3 <- P3_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P3_readymeals$hhnr)]
+pbr_households$ReadyMeal_P4 <- P4_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P4_readymeals$hhnr)]
+# -- 2020 -- 
+pbr_households$ReadyMeal_P5 <- P5_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P5_readymeals$hhnr)]
+pbr_households$ReadyMeal_P6 <- P6_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P6_readymeals$hhnr)]
+
+# -- 2021 -- 
+pbr_households$ReadyMeal_P7 <- P7_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P7_readymeals$hhnr)]
+pbr_households$ReadyMeal_P8 <- P8_readymeals$purchases[match(pbr_households$hhnr,
+                                                             P8_readymeals$hhnr)]
+
+# -- Code the purchases -- 
+# ensure NAs are 0s (this means no sale made)
+sum(is.na(pbr_households)) #8173 
+pbr_households[is.na(pbr_households)] <- 0 
+
+# split the house numbers away 
+pbr_household_split <- select(pbr_households, -hhnr)
+hhnrs_pbr <- pbr_households %>% select(hhnr)
+
+# set everything that isn't a 0 to 1 (meaning purchase made)
+pbr_household_split[pbr_household_split != 0] <- 1
+
+# bind the columns back together 
+pbr_households <- cbind(hhnrs_pbr, pbr_household_split)
+
+```
+
+```{r find_hhnrs_exclude}
+# -- Step 5: Check number of households who have made pb_readymeals purchases -- 
+# -- Find households who made no pb_meat purchases and exclude them from data -- 
+pbr_households <- pbr_households %>% 
+  mutate(Total = select(., ReadyMeal_P1:ReadyMeal_P8) %>% rowSums(na.rm = TRUE)) 
+
+# -- Exclude households who made no purchases -- 
+excluded_readymeal <- pbr_households %>% subset(Total < 1) # 682 households 
+
+# Thus 477 households meet the readymeal criteria 
+```
+
+```{r clean_readymeals}
+rm(P1_readymeals, P2_readymeals, P3_readymeals, P4_readymeals, P5_readymeals, P6_readymeals,
+   P7_readymeals, P8_readymeals)
+```
+
+#### Confectionery 
+
+```{r confectionery_time_periods}
+# -- Step 1: Cut the data into 6 month chunks -- 
+# Make the Date column into a date column 
+pb_confectionery$date <- as.Date(pb_confectionery$date)
+
+# -- Time Periods -- 
+# -- 2018 -- 
+P1_confectionery <- pb_confectionery[pb_confectionery$date >= "2018-01-01" & 
+                                     pb_confectionery$date <= "2018-06-30",] # 1831 
+P2_confectionery <- pb_confectionery[pb_confectionery$date >= "2018-07-01" & 
+                                     pb_confectionery$date <= "2018-12-31",] # 1685  
+
+# -- 2019 -- 
+P3_confectionery <- pb_confectionery[pb_confectionery$date >= "2019-01-01" & 
+                                     pb_confectionery$date <= "2019-06-30",] # 1794  
+P4_confectionery <- pb_confectionery[pb_confectionery$date >= "2019-07-01" & 
+                                     pb_confectionery$date <= "2019-12-31",] # 1563
+
+# -- 2020 -- 
+P5_confectionery<- pb_confectionery[pb_confectionery$date >= "2020-01-01" & 
+                                    pb_confectionery$date <= "2020-06-30",] # 1822 
+P6_confectionery <- pb_confectionery[pb_confectionery$date >= "2020-07-01" & 
+                                     pb_confectionery$date <= "2020-12-31",] # 1530
+
+# -- 2021 -- 
+P7_confectionery <- pb_confectionery[pb_confectionery$date >= "2021-01-01" & 
+                                     pb_confectionery$date <= "2021-06-30",] # 1169  
+P8_confectionery <- pb_confectionery[pb_confectionery$date >= "2021-07-01" & 
+                                     pb_confectionery$date <= "2021-12-31",] # 890 
+```
+
+```{r count_purchases}
+# -- Step 2: Count the pb_confectionery purchases per household -- 
+P1_confectionery <- count_purchases(P1_confectionery) #605  
+P2_confectionery <- count_purchases(P2_confectionery) #578
+P3_confectionery <- count_purchases(P3_confectionery) #547
+P4_confectionery <- count_purchases(P4_confectionery) #524
+P5_confectionery <- count_purchases(P5_confectionery) #584
+P6_confectionery <- count_purchases(P6_confectionery) #530
+P7_confectionery <- count_purchases(P7_confectionery) #404
+P8_confectionery <- count_purchases(P8_confectionery) #359
+```
+
+```{r code purchases}
+# -- Step 3: Match the sales data to the household -- 
+# Create dataframe to append data into 
+pbc_households <- screened_households %>% distinct(hhnr)
+
+# -- 2018 -- 
+pbc_households$Confect_P1 <- P1_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P1_confectionery$hhnr)]
+pbc_households$Confect_P2 <- P2_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P2_confectionery$hhnr)]
+
+# -- 2019 -- 
+pbc_households$Confect_P3 <- P3_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P3_confectionery$hhnr)]
+pbc_households$Confect_P4 <- P4_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P4_confectionery$hhnr)]
+# -- 2020 -- 
+pbc_households$Confect_P5 <- P5_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P5_confectionery$hhnr)]
+pbc_households$Confect_P6 <- P6_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P6_confectionery$hhnr)]
+
+# -- 2021 -- 
+pbc_households$Confect_P7 <- P7_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P7_confectionery$hhnr)]
+pbc_households$Confect_P8 <- P8_confectionery$purchases[match(pbc_households$hhnr,
+                                                             P8_confectionery$hhnr)]
+
+# -- Code the purchases -- 
+# ensure NAs are 0s (this means no sale made)
+sum(is.na(pbc_households)) #5141 
+pbc_households[is.na(pbc_households)] <- 0 
+
+# split the house numbers away 
+pbc_household_split <- select(pbc_households, -hhnr)
+hhnrs_pbc <- pbc_households %>% select(hhnr)
+
+# set everything that isn't a 0 to 1 (meaning purchase made)
+pbc_household_split[pbc_household_split != 0] <- 1
+
+# bind the columns back together 
+pbc_households <- cbind(hhnrs_pbc, pbc_household_split)
+```
+
+```{r find_hhnrs_exclude}
+# -- Step 5: Check number of households who have made pb_meat purchases -- 
+# -- Find households who made no pb_meat purchases and exclude them from data -- 
+pbc_households <- pbc_households %>% 
+  mutate(Total = select(., Confect_P1:Confect_P8) %>% rowSums(na.rm = TRUE)) 
+
+# -- Exclude households who made no purchases -- 
+excluded_confectionery <- pbc_households %>% subset(Total < 1) # 125 households 
+
+# Thus 1034 households meet the confectionery criteria 
+```
+
+```{r clean_confectionery}
+rm(P1_confectionery, P2_confectionery, P3_confectionery, P4_confectionery, P5_confectionery,
+   P6_confectionery, P7_confectionery, P8_confectionery)
+```
+
+#### Cleanups 
+```{r}
+rm(hhnrs_pbc, hhnrs_pbm, hhnrs_pbr)
+```
+
+#### Exclude irrelevant households 
+We're interested in seeing how households move from the products in one category (e.g., dairy) to make purchases in another (e.g., meat). This helps to identify if their interest is in plant-based products, or if their plant-based sale is perhaps instead due to a dietary preference or allergy. 
+
+To account for this with the data, we'll exclude households which have not made purchases in at least 2 of the plant-based categories: 
+```{r identify_exclusion_hhnrs}
+# -- Get a list of the hhnrs excluded per category -- 
+excluded_dairy <- excluded_dairy %>% select(hhnr)
+excluded_meat <- excluded_meat %>% select(hhnr)
+excluded_readymeal <- excluded_readymeal %>% select(hhnr)
+excluded_confectionery <- excluded_confectionery %>% select(hhnr)
+
+# -- bind them together into one list -- 
+excluded_hhs <- rbind(excluded_dairy, excluded_meat, excluded_readymeal, excluded_confectionery) 
+
+# -- Count how many times the household has been excluded -- 
+excluded_hhs <- excluded_hhs %>% group_by(hhnr) %>% mutate(count = n())
+
+# -- Remove duplicates so that each row represents a distinct hh -- 
+excluded_hhs <- excluded_hhs %>% distinct() # 932 
+
+# -- Cound how many will be excluded due to our criteria -- 
+sum(excluded_hhs$count == 4) # 21 households didn't fit the criteria in all categories 
+sum(excluded_hhs$count == 3) # 119 households didn't fit the criteria in 3 categories 
+
+# -- Subset the households to exclude -- 
+to_exclude <- excluded_hhs %>% subset(count >= 3) # 140 households 
+
+```
+
+```{r filter_data}
+# -- Dairy -- 
+# Separate the household data to exclude 
+dairy_to_exclude <- pb_households[pb_households$hhnr %in% to_exclude$hhnr,]
+# Split this from the coded data 
+pb_households <- anti_join(pb_households, dairy_to_exclude) # 1019 obs 
+
+# -- Meat -- 
+# Separate the household data to exclude 
+meat_to_exclude <- pbm_households[pbm_households$hhnr %in% to_exclude$hhnr,] 
+# Split this from the coded data
+pbm_households <- anti_join(pbm_households, meat_to_exclude) # 1019 obs 
+
+# -- Ready Meals -- 
+# Separate the household data to exclude 
+readymeals_to_exclude <- pbr_households[pbr_households$hhnr %in% to_exclude$hhnr,] 
+# Split this from the coded data
+pbr_households <- anti_join(pbr_households, readymeals_to_exclude) # 1019 obs 
+
+# -- Confectionery -- 
+# Separate the household data to exclude 
+confectionery_to_exclude <- pbc_households[pbc_households$hhnr %in% to_exclude$hhnr,]
+pbc_households <- anti_join(pbc_households, confectionery_to_exclude)
+
+```
+
+```{r save_coded_data}
+# Split away the "Total" column and save the data 
+coded_dairy <- pb_households %>% select(1:9)
+coded_meat <- pbm_households %>% select(1:9)
+coded_readymeals <- pbr_households %>% select(1:9)
+coded_confectionery <- pbc_households %>% select(1:9)
+
+# Rename the columns 
+coded_dairy <- rename_columns(coded_dairy)
+coded_meat <- rename_columns(coded_meat)
+coded_readymeals <- rename_columns(coded_readymeals)
+coded_confectionery <- rename_columns(coded_confectionery)
+
+# save into the coded_data folder 
+write.csv(coded_dairy, "data/coded_data/dairy.csv", row.names = F)
+write.csv(coded_meat, "data/coded_data/meat.csv", row.names = F)
+write.csv(coded_readymeals, "data/coded_data/readymeals.csv", row.names = F)
+write.csv(coded_confectionery, "data/coded_data/confectionery.csv", row.names = F)
+
+```
+
+The data has now been coded and filtered to be fed into the model. 

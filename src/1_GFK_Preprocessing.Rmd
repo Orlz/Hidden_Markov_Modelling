@@ -1,0 +1,404 @@
+---
+title: "GFK_Preprocessing"
+author: "Orla Mallon"
+date: "17/05/2022"
+output: html_document
+---
+
+This script is the first in a series of 4 scripts which take messy panel data and convert it into a format which a hidden markov model can read. The series of scripts are as follows: 
+
+1_GFK_Preprocessing.Rmd  = Initial merging and cleaning of the raw data files 
+2_Categorising_Products = Finding and categorizing plant-based products 
+3_Coding_Cateogries = Matching plant-based sales and coding these for the model
+4_HMM_Model = Modelling the data using a hidden markov model 
+
+The current script deals with the following steps: 
+
+Part 1: Initial File Cleaning and Merging 
+i) Loading the household, sales, and product data for 2018 - 2021
+ii) Merging the old and new product data files 
+iii) Cleaning the sales data 
+iv) Finding the households which are activitely participating in the data 
+v) Crop the sales data to include only active households 
+vi) Merge the sales and product data
+
+Part 2: Remove sales from categories of known confusion 
+- Removes vegetables, plants, and oils from the sales data to be categorised 
+
+**Output of Script: A clean dataframe of sales and product data merged ready to be categorised. **
+
+## Setup 
+```{r setup}
+# -- working directory -- 
+setwd("~/Desktop/dev/Data_Science/")
+getwd()
+
+# -- packages -- 
+install.packages("readxl")
+library("readxl") # for reading excel files 
+library(tidyverse, dplyr) # data wrangling 
+library(rio) # for reading stam files 
+library(haven) # for reading stam files 
+
+# -- load data -- 
+# Sales for 2018, 2019, 2020, 2021 
+sales_2018 <- read.csv("data/sales_data/Year_2018.csv") # (2,155,532 obs)
+sales_2019 <- read.csv("data/sales_data/Year_2019.csv") # (2,096,983 obs)
+sales_2020 <- read.csv("data/sales_data/Year_2020.csv", sep = ";") # (2,927,867 obs)
+sales_2021 <- read.csv("data/sales_data/Year_2021.csv", colClasses="factor") # (2,212,234 obs)
+
+# Household data 
+weighted_HH <- read.csv("data/background_data/weighted_HH.csv") # 3898 obs 
+households_2021 <- import("~/OneDrive - Aarhus Universitet/GFK Data/data_2021/data/stamgfk2022.sas7bdat")
+
+# Product data 
+articles <- read.csv("data/product_data/articles_2006_2021.csv", colClasses="factor")
+articles_old <- read.csv("~/OneDrive - Aarhus Universitet/GFK Data/4. Shopping Data (Products)/articles2006-2020.csv", colClasses="factor")
+
+# -- reclassify data columns -- 
+articles$EanCodeText <- as.factor(articles$EanCodeText)
+plant_based_data$`Bar Code` <- as.factor(plant_based_data$`Bar Code`)
+```
+
+### Merging old and new product data
+The product data consists of information relating to every product's label, brand, and product group etc (see data descriptions). These files are used to contextualise the sales data and tell us more about the purchase made. 
+
+The main column of interest is the eankode, which is how products are matched to the sales data. This is the product's 'barcode' or unique identifier number, which is given to the product when it is launched in the market. Sometimes products of a similar type and brand share eankode's, but this is rare. Thus we can be quite confident that the product files are able to give us an accurate idea of exactly what the consumer purchased. The eankode is the only link between the sales and product data. 
+
+As the 2021 data has only recently been released, there are new products included in the product file. We also need to have the products from earlier years as we are working with data stretching back to 2018. Thus in the below section, the two product files will be merged in such a way that we can be sure to have all rows for both the old and new product information. 
+```{r merge_product_files}
+# -- STEP ONE: Make sure the 2 product (articles) dataframes are the same with no overlaps-- 
+
+#1. Cut the private label columns from the old articles files 
+articles_old <- articles_old %>% select(1:27)
+
+#2. Get a a quick overview of the classes of each df column -- 
+# articles 
+table(sapply(articles, class)) # There are 25 character columns and 2 integer columns 
+
+# old articles 
+table(sapply(articles_old, class)) # There are 17 character columns and 10 integer
+
+#3. Find the mismatched columns and convert them to factor columns (can handle alphanumeric)
+sapply(articles, class)
+
+# articles 
+articles$EanCodeText <- as.factor(articles$EanCodeText)
+articles$DType <- as.factor(articles$DType)
+articles$FType <- as.factor(articles$FType)
+articles$GType <- as.factor(articles$GType)
+articles$IType <- as.factor(articles$IType)
+articles$JType <- as.factor(articles$JType)
+articles$KType <- as.factor(articles$KType)
+articles$LType <- as.factor(articles$LType)
+articles$MType <- as.factor(articles$MType)
+articles$EanCodeNABS <- as.factor(articles$EanCodeNABS)
+
+# articles old 
+articles_old$EanCodeText <- as.factor(articles_old$EanCodeText)
+articles_old$DType <- as.factor(articles_old$DType)
+articles_old$FType <- as.factor(articles_old$DType)
+articles_old$GType <- as.factor(articles_old$DType)
+articles_old$IType <- as.factor(articles_old$DType)
+articles_old$JType <- as.factor(articles_old$DType)
+articles_old$KType <- as.factor(articles_old$DType)
+articles_old$LType <- as.factor(articles_old$DType)
+articles_old$MType <- as.factor(articles_old$DType)
+articles_old$EanCodeNABS <- as.factor(articles_old$EanCodeNABS)
+
+#4. Find the eankodes which are in both dataframes
+# This ensures we will not have overlaps or conflicting information 
+ean_in_both <- semi_join(articles_old, articles, by = "EanCodeText") # 64869 
+# remove these from old articles 
+articles_old <- anti_join(articles_old, ean_in_both) # 395,827 obs 
+rm(ean_in_both)
+
+
+# -- STEP TWO: Ensure each data frame has unique rows (i.e., no duplicate rows) -- 
+## articles 
+articles_distinct <- articles %>% distinct(EanCodeText, 
+                                           ProductGroupCode, 
+                                           ArticleText, 
+                                           .keep_all = TRUE ) # 242,477 obs 
+
+# check the rows which are removed 
+articles_removed <- anti_join(articles, articles_distinct) # 36,307 
+articles_removed <- articles_removed %>% group_by(EanCodeText) %>% mutate(ean_count = n())
+
+# reduce articles to include only one count of each Eancode (after checking)
+articles <- articles %>% distinct(EanCodeText, 
+                                  .keep_all = TRUE) # 42216 obs 
+
+## articles_old 
+articles_old_distinct <- articles_old %>% distinct(EanCodeText, 
+                                                   ProductGroupCode, 
+                                                   ArticleText, 
+                                                   .keep_all = TRUE) # 389,449 obs 
+
+# check the removed rows 
+articles_old_removed <- anti_join(articles_old, articles_old_distinct)
+articles_old_removed <- articles_old_removed %>% 
+  group_by(EanCodeText) %>% 
+  mutate(ean_count = n())
+
+# reduce articles_old to include only one count of each eankode 
+articles_old <- articles_old %>% distinct(EanCodeText, 
+                                          .keep_all = TRUE) # 144,628 obs 
+
+# -- STEP THREE: Combine the 2 articles files -- 
+# Combine the 2 articles files into one 
+articles_new <- rbind(articles, articles_old) # 186844 obs 
+articles_new <- articles_new %>% group_by(EanCodeText) %>% mutate(count = n()) # check for dups
+articles <- articles_new # make this the new articles dataframe 
+
+# clean up environment 
+rm(articles_distinct, articles_old_distinct, 
+   articles_old_removed, articles_removed, 
+   articles_new, articles_old)
+
+```
+
+Additional notes: After thoroughly exploring the product file, the decision was taken to reduce this down to include only one entry for each eankode. This was because the eankode was often capturing the same type of product with slight difference between such as flavour etc, which causes problems when we merge it with the sales data. Other eankodes were problematic as they spanned many different categories and it was though to not be useful to overcomplicate the data by including them, thus they've been removed so that the product file has only one entry (row) for each eankode. 
+
+### Clean up the sales data 
+The sales is the records of every purchase made by households across the year. These contain millions of rows of data, and are often messy and in need of some cleaning. The steps taken to handle these files are outlined below: 
+```{r clean_sales_data}
+# -- Re-classify the ean kode columns -- 
+sales_2017$eankode <- as.factor(sales_2017$eankode)
+sales_2018$eankode <- as.factor(sales_2018$eankode)
+sales_2019$eankode <- as.factor(sales_2019$eankode)
+sales_2020$EAN <- as.factor(sales_2020$EAN)
+sales_2021$eankode <- as.factor(sales_2021$eankode)
+
+# -- Clip data to include only columns of interest -- 
+sales_2017 <- sales_2017 %>% select(hhnr, eankode, year, sasdato, shop, tid, ANTAL)
+sales_2018 <- sales_2018 %>% select(hhnr, eankode, year, sasdato, shop, tid, ANTAL)
+sales_2019 <- sales_2019 %>% select(hhnr, eankode, year, sasdato, shop, tid, ANTAL)
+sales_2020 <- sales_2020 %>% select(HHNR, EAN, YEAR, DAY, MONTH, SHOP, TID, ANTAL)
+sales_2021 <- sales_2021 %>% select(hhnr, eankode, year, sasdato, shop, tid, ANTAL)
+
+# -- rename sales_2020 columns -- 
+sales_2020 <- sales_2020 %>% 
+  rename(
+    hhnr = HHNR, 
+    eankode = EAN, 
+    year = YEAR, 
+    day = DAY, 
+    month = MONTH, 
+    shop = SHOP, 
+    tid = TID)
+
+# -- rename date column for 2017, 2018, and 2019 -- 
+sales_2017 <- sales_2017 %>% rename(date = sasdato)
+sales_2018 <- sales_2018 %>% rename(date = sasdato)
+sales_2019 <- sales_2019 %>% rename(date = sasdato)
+sales_2021 <- sales_2021 %>% rename(date = sasdato)
+
+# - reclassify date column into 'Date' column -- 
+sales_2017$date <- as.Date(sales_2017$date)
+sales_2018$date <- as.Date(sales_2018$date)
+sales_2019$date <- as.Date(sales_2019$date)
+sales_2021$date <- as.Date(sales_2021$date)
+class(sales_2019$date)
+
+# -- Create date column from day month year (style = YYYY-MM-DD) in sales_2020 -- 
+sales_2020$date <- as.Date(with(sales_2020, paste(year, month, day,sep="-")), "%Y-%m-%d")
+class(sales_2020$date)
+
+# reorder and delete redundant columns 
+sales_2020 <- sales_2020 %>% select(hhnr, eankode, year, date, shop, tid, ANTAL)
+```
+
+### Keep sales data from active households 
+The weighted_HH dataset contains information on whether the household has actively participated in the panel data for each year. A 1 indicates they have actively participated (i.e., been recording sales), while a 0 indicates the household has not been active.
+
+The 2021 data has not yet been added to the weighted household dataset so we'll first need to record which households have been actively participating in the panel data. This is defined as households with at least 100 sales records throughout 2021. 
+```{r find_active_households}
+# -- Clean up weighted_HH df -- 
+# delete redundent columns 
+weighted_HH <- weighted_HH %>% select(X, X2017, X2018, X2019, X2020)  
+
+# delete first row 
+weighted_HH <- weighted_HH[-c(1),] # 3897 obs
+
+# rename rows 
+weighted_HH <- weighted_HH %>% rename(
+  hh_id = X,
+  year_2017 = X2017, 
+  year_2018 = X2018,
+  year_2019 = X2019, 
+  year_2020 = X2020) # (3897 obs)
+
+# -- Create a column for the 2021 households -- 
+# get a list of the active 2021 households 
+active_households_2021 <- sales_2021 %>% group_by(hhnr) %>% mutate(purchase = n())
+active_households_2021 <- active_households_2021 %>% distinct(hhnr, .keep_all = T) # 3086 
+
+# check how many households from 2021 are included in weighted_HH 
+hh_check <-weighted_HH[weighted_HH$hh_id %in% active_households_2021$hhnr, ] 
+hh_check <- hh_check %>% distinct(hh_id) # 1969 households 
+
+# crop 2021 households to include only the ones with more than 100 purchases across the year 
+active_households_2021 <- active_households_2021 %>% subset(purchase > 99) # 2475 households 
+active_households_2021 <- active_households_2021 %>% select(hhnr)
+
+# check how many active 2021 households are in the hh_check 
+hh_check <- weighted_HH[weighted_HH$hh_id %in% active_households_2021$hhnr, ] # 1887 households
+hh_check$year_2021 <- as.character("1")
+hh_check <- hh_check %>% select(hh_id, year_2021)
+
+# merge the 2021 households to weighted_HH 
+weighted_HH <- merge(weighted_HH, hh_check, 
+              by = "hh_id",
+              all.x = T, all.y = F ) #3897 obs 
+
+# make the NA's into 0s 
+weighted_HH$year_2021[is.na(weighted_HH$year_2021)] <- "0"
+
+# Sum the 5 years and if the total = 5, it means they have been actively participating. 
+# reclassify the columns into integers 
+weighted_HH$year_2017 <- as.integer(weighted_HH$year_2017)
+weighted_HH$year_2018 <- as.integer(weighted_HH$year_2018)
+weighted_HH$year_2019 <- as.integer(weighted_HH$year_2019)
+weighted_HH$year_2020 <- as.integer(weighted_HH$year_2020)
+weighted_HH$year_2021 <- as.integer(weighted_HH$year_2021)
+
+# sum the 4 years 
+weighted_HH$participation_score <- weighted_HH$year_2017 + weighted_HH$year_2018 + 
+  weighted_HH$year_2019 + weighted_HH$year_2020 + weighted_HH$year_2021
+
+# remove households with participation_score of less than 4 
+weighted_HH <- weighted_HH %>% subset(participation_score == 5) # 1167 households 
+
+# reclassify hh_id 
+weighted_HH$hh_id <- as.factor(weighted_HH$hh_id)
+
+# Save household data csv 
+write.csv(weighted_HH, "data/background_data/households_updated.csv")
+
+# clean up the environment 
+rm(active_households_2021, hh_check)
+```
+
+### Cut sales data to only include active households 
+Having now identified the households which are active, and thus of interest to the study, we will crop away any data from households which are not in this list. These may be households who sporadically participate or whom have dropped out of the study. The steps taken are outlined below: 
+```{r keep_active_household_data}
+# -- reclassify the hhnr column -- 
+sales_2017$hhnr <- as.factor(sales_2017$hhnr)
+sales_2018$hhnr <- as.factor(sales_2018$hhnr)
+sales_2019$hhnr <- as.factor(sales_2019$hhnr)
+sales_2020$hhnr <- as.factor(sales_2020$hhnr)
+sales_2021$hhnr <- as.factor(sales_2021$hhnr)
+sum(is.na(sales_2021$hhnr)) # check there are no empty hh entries
+
+# Match the sales with household numbers in the weighted_hh file 
+sales_2017 <- sales_2017[sales_2017$hhnr %in% weighted_HH$hh_id, ] # (1283,802 obs)
+sales_2018 <- sales_2018[sales_2018$hhnr %in% weighted_HH$hh_id, ] # (1300,648 obs)
+sales_2019 <- sales_2019[sales_2019$hhnr %in% weighted_HH$hh_id, ] # (1233,838 obs)
+sales_2020 <- sales_2020[sales_2020$hhnr %in% weighted_HH$hh_id, ] # (1587,493 obs)
+sales_2021 <- sales_2021[sales_2021$hhnr %in% weighted_HH$hh_id, ] # (1213,765 obs)
+
+# Combine all sales into one 
+sales_data <- rbind(sales_2017, sales_2018, sales_2019, sales_2020, sales_2021) #(6619,546 obs)
+print(sum(is.na(sales_data$hhnr)))
+print(sum(is.na(sales_data$eankode)))
+
+# Save sales data 
+write.csv(sales_data, "data/sales_data/all_sales_data.csv", row.names = FALSE)
+
+# clean up environment 
+rm(sales_2017, sales_2018, sales_2019, sales_2020, sales_2021)
+```
+
+
+#### Merge sales and product data 
+With the sales and product data cleaned and cropped, we can now merge the files so that we have all the product information relevant to the sale. These two files are merged using the eankode column: 
+```{r merge_sales_and_product}
+# -- Ensure sales data and product data ean codes are factors -- 
+class(sales_data$eankode)
+class(articles$EanCodeText)
+#sales_data$eankode <- as.factor(sales_data$eankode)
+#articles$EanCodeText <- as.factor(articles$EanCodeText)
+
+# -- Clip articles file (product data) -- 
+articles <- articles %>% select(EanCodeText, ProductGroupCode, PgText, ArticleText, Cmrk, ManufactorName, BrandText) # 186844 obs 
+
+# -- Merge the files by ean -- 
+sales_data <- merge(sales_data, articles, 
+                    by.x = "eankode", by.y = "EanCodeText",
+                    all = TRUE) # 6745359 obs
+
+# -- Clean up the merged data -- 
+# 1. Remove rows where no eancode has been recorded 
+sum(sales_data$eankode == 0) # 456,493 sales with no eancode recorded 
+sales_data <- sales_data[!(sales_data$eankode== 0),] # (6288,866 obs)
+
+# 2. Remove rows where no household has been recorded 
+sum(is.na(sales_data$hhnr)) # 125813 sales with no household recorded 
+sales_data <- sales_data[!(is.na(sales_data$hhnr)),] # 6163053 obs
+
+# 3. Remove rows where no ArticleText has been recorded (i.e., does not know about product)
+sum(is.na(sales_data$ArticleText)) # 808,357 
+sales_data <- sales_data[!(is.na(sales_data$ArticleText)),] #5354,696 obs 
+
+# 3. Remove duplicates 
+sales_data <- sales_data %>% distinct() # 5308,638 obs 
+
+# -- Quality checks: ensure there are no NAs in important column -- 
+print(sum(is.na(sales_data$eankode)))
+print(sum(is.na(sales_data$hhnr)))
+print(sum(is.na(sales_data$ArticleText)))
+print(sum(is.na(sales_data$date)))
+
+# -- Save dataframe -- 
+write.csv(sales_data, "data/sales_data/sales_with_product_data.csv", row.names = FALSE)
+
+```
+
+## Part 2: Exclude irrelevant categories of Known confusion
+The below rows are removed in advance before exploring as they are known to cause confusion within the pulling of data. This allows better filtering by searching for words such as 'plant-base' without catching plants etc. 
+
+Vegetables = removed because they refer to base fruit and vegetable products, which are not a plant-based alternative but can be caught in subsetting. 
+
+Plants = removed because they often have the word "plant" in their description, but are referring to flowers, seeds, and plant pots. 
+
+Oils = removed as sometimes recorded as vegan products but they are typically plant-based and therefore not an alternative
+
+```{r filter_product_groups}
+# -- reload sales data if not running script from top -- 
+#sales_reloaded <- read.csv("data/sales_data/sales_with_product_data.csv")
+
+# -- Vegetables (Grøntsager (047)) -- 
+# First check they have no articles of interest 
+vegetables <- sales_data %>% subset(ProductGroupCode == 47) # 565,477 obs  
+# get only distinct article texts and eyeball to ensure all should be removed 
+vegetables_unique <- vegetables %>% distinct(ArticleText, .keep_all = T) # 1076
+# remove from the sales data 
+sales_data <- anti_join(sales_data, vegetables) # (sales =4743,161)
+# remove dfs 
+rm(vegetables, vegetables_unique)
+
+# -- Plants (Blomster (080)) -- 
+plants <- sales_data %>% subset(ProductGroupCode == 80) #28,917 obs 
+plants_unique <- plants %>% distinct(ArticleText, .keep_all = T) # check
+sales_data <- anti_join(sales_data, plants) # remove from sales (sales = 4714,244 obs)
+# also remove plant pots 
+plant_pots <- sales_data[grep("Potteplante", sales_data$ArticleText),] # 6779 obs
+sales_data <- anti_join(sales_data, plant_pots) # 4707,465 obs
+# also remove random plant product 
+plant_1stk <- sales_data[grep("Plante 1 stk", sales_data$ArticleText),]	# 98 obs 
+sales_data <- anti_join(sales_data, plant_1stk) # (sales = 4707367 obs)
+rm(plants, plants_unique, plant_pots, plant_1stk)
+
+# -- Oils (Mad og Spiseolie (050)) -- 
+oils <- sales_data %>% subset(ProductGroupCode == 50) # 13036 
+oils_unique <- oils %>% distinct(ArticleText, .keep_all = T)
+sales_data <- anti_join(sales_data, oils) # (sales = 4694331 obs)
+rm(oils, oils_unique)
+
+# -- Re-save dataframe -- 
+write.csv(sales_data, "data/sales_data/sales_with_product_data.csv", row.names = FALSE)
+
+```
+
+This is the end 

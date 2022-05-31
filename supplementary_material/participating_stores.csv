@@ -1,0 +1,385 @@
+﻿ShopCode;ShopText;ShopType;ShopChain
+1;BRUGSEN VESTKØB;Supermarkets;SuperGros
+2;ØVRIGE KØBMÆND;Other Food;Other Food
+3;ØVRIGE SUPERMARKEDER;Other Food;Other Food
+4;DAGLI BRUGSEN;Small Supermarkets;Coop
+5;BRUGSEN SELVBJ/MINI;Small Supermarkets;Coop
+6;BRUGSEN SUPERMARKED;Small Supermarkets;Coop
+7;KVICKLY;Supermarkets;Coop
+8;SUPER BRUGSEN;Supermarkets;Coop
+9;OBS;Other Food;Coop
+10;COOP.DK;Internet/Mail Order;Internet/Mail Order
+11;IRMA SELBETJENING;Supermarkets;Coop
+12;IRMA SUPERMARKED;Supermarkets;Coop
+13;ISMEJERI, BRØDUDSALG;Kiosk/Gas station;Other Food
+14;IRMA CITY;Supermarkets;Coop
+15;VIKTUALIE;Kiosk/Gas station;Other Food
+17;SLAGTER;Specialty Stores;Other Food
+18;C;Small Supermarkets;Coop
+19;FISKEFORRETNING;Specialty Stores;Other Food
+20;TORV/MARKED;Specialty Stores;Other Food
+21;GRØNTHANDLER;Specialty Stores;Other Food
+22;BLOMSTERSTAND;Specialty Stores;Other Non-Food
+23;OSTEFORRETNING;Specialty Stores;Other Food
+25;BAGER;Specialty Stores;Other Food
+26;HELSEKOSTFORRETNING;Drugstore/HPC;Other Non-Food
+27;KAFFE-/THEFORRETNING;Specialty Stores;Other Food
+28;KØB I UDLAND;Abroad;Abroad
+29;FÆRGE UDLAND;Abroad;Abroad
+30;DYREFORRETNING;Specialty Stores;Other Non-Food
+32;CHOKOLADEFORRETNING;Specialty Stores;Other Food
+33;TOBAK OG VIN;Specialty Stores;Other Food
+37;VOGN;Specialty Stores;Other Food
+38;PØLSEVOGN;Other Food;Convenience
+41;PARFUMERI;Drugstore/HPC;Other Non-Food
+42;FARVEHANDEL;DIY Stores;Other Non-Food
+43;MATERIALIST;Drugstore/HPC;Other Non-Food
+44;SCHLECKER;Drugstore/HPC;Other Non-Food
+46;APOTEK;Drugstore/HPC;Other Non-Food
+49;BONAPARTE;Internet/Mail Order;Internet/Mail Order
+50;BONDEGÅRD;Other Food;Other Food
+51;EN GROS (EXCL.METRO);Other Food;Other Food
+52;KIOSK;Kiosk/Gas station;Convenience
+53;7-ELEVEN;Kiosk/Gas station;Convenience
+54;BARBER/FRISØR;Drugstore/HPC;Other Non-Food
+55;POSTORDRE;Internet/Mail Order;Internet/Mail Order
+56;DAELLS VAREHUS POSTORDRE;Internet/Mail Order;Internet/Mail Order
+57;ELITE;Kiosk/Gas station;SuperGros
+58;ÅLBORG STORKØB(DREISLER);Supermarkets;SuperGros
+59;ELLOS (POSTORDRE);Internet/Mail Order;Internet/Mail Order
+60;LØVBJERG FOOD MART;Supermarkets;Reitan
+61;JACO;Other Food;Other Food
+62;B.S. MARKED;Other Food;Other Food
+63;EASY24;Kiosk/Gas station;Convenience
+66;FØTEX;Supermarkets;Dansk Supermarked
+67;BILKA;Hypermarkets;Dansk Supermarked
+68;ALDI;Hard Discount;Other Food
+71;BRDR. DREISLER;Supermarkets;SuperGros
+73;DAKO;Other Food;Other Food
+75;HJØRRING STORKØB(DREISR);Supermarkets;SuperGros
+76;ISO;Supermarkets;SuperGros
+77;ISO INTERNET;Internet/Mail Order;Internet/Mail Order
+81;EKSTRA;Other Food;Other Food
+82;TRICA (EDEKA-SUPERM.);Other Food;Other Food
+83;DK - DIN KØBMAND;Other Food;Other Food
+85;SUPERLAND;Other Food;Other Food
+86;SUPER NÆRKØB;Other Food;Other Food
+87;FAVØR INTERNET;Internet/Mail Order;Internet/Mail Order
+88;FAVØR;Other Food;Other Food
+95;FOCUS - EDEKA;Other Food;SuperGros
+96;TOBAKSAUTOMAT;Other Non-Food;Other Non-Food
+97;KANTINE;Other Food;Other Food
+98;PERSONALEKØB;Other Food;Other Food
+99;ØVRIGE;Other Food;Other Food
+100;MERKO;Small Supermarkets;SuperGros
+101;ØVRIGE INTERNET;Internet/Mail Order;Internet/Mail Order
+102;SPAR 10;Internet/Mail Order;Internet/Mail Order
+103;NETTO;Soft Discount;Dansk Supermarked
+104;FAKTA;Soft Discount;Coop
+105;LIDL;Hard Discount;Other Food
+106;COMA DISCOUNT (EDEKA);Soft Discount;SuperGros
+109;ÅRSTIDERNE/BURESØ;Internet/Mail Order;Internet/Mail Order
+110;BLOMSTERFORRETNING;Specialty Stores;Other Non-Food
+111;GARTNERI;Specialty Stores;Other Non-Food
+112;PLANTESKOLE;Specialty Stores;Other Non-Food
+113;EL-INSTALLATØR;Other Non-Food;Other Non-Food
+114;LAMPEFORRETNING;Other Non-Food;Other Non-Food
+117;SPORTSFORRETNING;Clothing Stores;Other Non-Food
+120;KLUB/FORENING;Other Non-Food;Other Non-Food
+126;PRIMA (INTERNET);Internet/Mail Order;Internet/Mail Order
+127;PRIMA;Other Food;SuperGros
+128;DIVERSE VESTKØB;Supermarkets;SuperGros
+131;S & E,ROSK/NØRRE.VESTKØB;Clothing Stores;Other Non-Food
+132;SUPER 1;Other Food;Other Food
+134;CENTRALKØB;Supermarkets;SuperGros
+135;SUPRA;Other Food;Other Food
+137;DAVLI (ØST);Other Food;Other Food
+138;DAVLI (VEST);Other Food;Other Food
+139;SUPERBEST(VESTKØB-ØST);Supermarkets;SuperGros
+140;SUPERBEST(CENTRAL/-VEST);Supermarkets;SuperGros
+149;METRO;Other Food;Other Food
+150;FAVORIT;Other Food;Other Food
+166;FØTEX FOOD;Supermarkets;Dansk Supermarked
+167;A-Z FAMILIEMARKED;Supermarkets;Dansk Supermarked
+173;LET-KØB (CHR.KJÆRGAARD);Supermarkets;SuperGros
+174;CHR. KJÆRGAARD MINI;Other Food;Other Food
+175;CHR. KJÆRGAARD SUPER;Other Food;Other Food
+176;DE FRISKE BUTIKKER;Other Food;Other Food
+190;TORVET (INTERNET);Internet/Mail Order;Internet/Mail Order
+191;SUPERVARER;Internet/Mail Order;Internet/Mail Order
+192;INTERVARER;Internet/Mail Order;Internet/Mail Order
+193;SARTORVET;Internet/Mail Order;Internet/Mail Order
+194;SKAGENFOOD;Internet/Mail Order;Internet/Mail Order
+195;SUPERBEST INTERNET;Internet/Mail Order;Internet/Mail Order
+196;IRMATORVET;Internet/Mail Order;Internet/Mail Order
+197;RETNEMT;Internet/Mail Order;Internet/Mail Order
+198;NEMLIG INTERNET;Internet/Mail Order;Internet/Mail Order
+199;ØVR.INTERNET (DAGLIGV.);Internet/Mail Order;Internet/Mail Order
+203;DØGN NETTO;Soft Discount;Dansk Supermarked
+204;FAKTA QUICK;Soft Discount;Coop
+210;SUMA DISCOUNT;Soft Discount;Other Food
+211;SUMA/SUPERSTORE;Supermarkets;SuperGros
+220;EUROSPAR;Supermarkets;SuperGros
+221;SPAR - DANKØB;Small Supermarkets;SuperGros
+222;SPAR SUPER/SPAR;Small Supermarkets;SuperGros
+223;KWIK SPAR;Small Supermarkets;SuperGros
+226;EGEFELD (ØKO);Other Food;Convenience
+321;ØVRIGE DAGROFA MINI;Small Supermarkets;SuperGros
+322;ØVRIGE DAGROFA SUPER;Supermarkets;SuperGros
+323;KC STORKØB;Other Food;SuperGros
+381;ØVRIGE EDEKA MINI;Small Supermarkets;SuperGros
+382;EDEKA AKTIV SUPER;Small Supermarkets;SuperGros
+384;NH MINI;Other Food;Other Food
+385;OCEKA/NH SUPER;Other Food;Other Food
+386;KISA MARKED (MINIMARKED);Other Food;Other Food
+387;HER & NU (DAGROFA);Kiosk/Gas station;SuperGros
+413;LOKALBRUGSEN;Small Supermarkets;Coop
+420;STATOIL;Kiosk/Gas station;Convenience
+421;O.K. BENZIN;Kiosk/Gas station;Convenience
+422;SHELL;Kiosk/Gas station;Convenience
+423;Q8;Kiosk/Gas station;Convenience
+424;TEXACO;Kiosk/Gas station;Convenience
+425;DK BENZIN;Kiosk/Gas station;Convenience
+426;HYDRO;Kiosk/Gas station;Convenience
+427;HAAHR;Kiosk/Gas station;Convenience
+428;JET;Kiosk/Gas station;Convenience
+429;SPAR (BENZIN);Kiosk/Gas station;Convenience
+430;UNO-X;Kiosk/Gas station;Convenience
+431;METAX;Kiosk/Gas station;Convenience
+432;MOBIL (BENZIN);Kiosk/Gas station;Convenience
+439;ØVRIGE BENZINSTATIONER;Kiosk/Gas station;Convenience
+440;HYDRO/TEXACO INTERNET;Internet/Mail Order;Internet/Mail Order
+452;TRAFIK-KIOSK;Kiosk/Gas station;Convenience
+506;ALTA (JACO);Soft Discount;SuperGros
+507;KIWI;Soft Discount;SuperGros
+508;PRISA DISCOUNT/REMA1000;Soft Discount;Reitan
+511;ABC LAVPRIS (EJ JACO);Supermarkets;SuperGros
+599;ØVR.INTERNET(EJ DAGLIGV);Internet/Mail Order;Internet/Mail Order
+601;LINGERI/TRIKOTAGE;Clothing Stores;Other Non-Food
+602;DAMEKONFEKTION;Clothing Stores;Other Non-Food
+603;HERREEKVIPERING;Clothing Stores;Other Non-Food
+604;BØRNETØJSFORRETNING;Clothing Stores;Other Non-Food
+606;JEANS- MODEFORRETNING;Clothing Stores;Other Non-Food
+607;DAELLS VAREHUS;Clothing Stores;Other Non-Food
+608;TØJ LAVPRIS/DISCOUNT;Clothing Stores;Other Non-Food
+609;ØVRIGE TEKSTIL/SPE.;Clothing Stores;Other Non-Food
+610;GENBRUGSFORRETNING;Clothing Stores;Other Non-Food
+611;FREE FORM (DAELLS);Clothing Stores;Other Non-Food
+612;IN-STORE (IRMA);Supermarkets;Coop
+613;LINDEX (UDG);Clothing Stores;Other Non-Food
+616;VIVENDI (DAELLS VAREHUS);Clothing Stores;Other Non-Food
+618;FAMILIENS TØJ (D.V.);Clothing Stores;Other Non-Food
+619;HENNES & MAURITZ;Clothing Stores;Other Non-Food
+620;MAGASIN (DAGROFA);Other Non-Food;SuperGros
+621;TØJ & SKO;Clothing Stores;Other Non-Food
+622;JYSK SENGETØJSLAGER;Clothing Stores;Other Non-Food
+623;DARLING CHERIE;Clothing Stores;Other Non-Food
+624;MONSOON;Clothing Stores;Other Non-Food
+625;SKOTØJSFORRETNING;Clothing Stores;Other Non-Food
+626;ECCO;Clothing Stores;Other Non-Food
+627;PAW SKO;Clothing Stores;Other Non-Food
+628;SKO RINGEN;Clothing Stores;Other Non-Food
+629;JEANSBUTIKKER;Clothing Stores;Other Non-Food
+630;TØJEKSPERTEN;Clothing Stores;Other Non-Food
+631;KAUFMANN;Clothing Stores;Other Non-Food
+632;REGENT;Clothing Stores;Other Non-Food
+633;MR;Clothing Stores;Other Non-Food
+634;DIN TØJMAND;Clothing Stores;Other Non-Food
+635;LEVIS;Clothing Stores;Other Non-Food
+640;FRØKJÆR;Clothing Stores;Other Non-Food
+641;ZARA;Clothing Stores;Other Non-Food
+642;DRESSMANN;Clothing Stores;Other Non-Food
+650;SPORTMASTER;Clothing Stores;Other Non-Food
+651;INTERSPORT;Clothing Stores;Other Non-Food
+652;DIN SPORTSPARTNER;Clothing Stores;Other Non-Food
+653;ATHLETES FOOT (DERES);Clothing Stores;Other Non-Food
+654;STADIUM;Clothing Stores;Other Non-Food
+659;SPORTSFORRETNINGER ØV.;Clothing Stores;Other Non-Food
+661;VERO MODA;Clothing Stores;Other Non-Food
+662;JACK & JONES;Clothing Stores;Other Non-Food
+663;COCKTAIL RETAILERS,;Clothing Stores;Other Non-Food
+664;NOA NOA;Clothing Stores;Other Non-Food
+665;RED / GREEN;Clothing Stores;Other Non-Food
+666;JØRGEN & JØRGINE;Clothing Stores;Other Non-Food
+667;DERES DESIGN;Clothing Stores;Other Non-Food
+668;FLASH;Clothing Stores;Other Non-Food
+669;MAC COY;Clothing Stores;Other Non-Food
+670;TIPPY;Clothing Stores;Other Non-Food
+671;CARLI GRY,JACKPOT,COTTEN;Clothing Stores;Other Non-Food
+672;GINE;Clothing Stores;Other Non-Food
+673;WEP;Clothing Stores;Other Non-Food
+674;DANISH FASHION GROUP;Clothing Stores;Other Non-Food
+675;C&A;Clothing Stores;Other Non-Food
+676;ØVR. MULTIPEL GENEREL;Clothing Stores;Other Non-Food
+677;ØVR. DETAILMÆRKE;Clothing Stores;Other Non-Food
+678;ONLY JEANS WEAR, BESTS.;Clothing Stores;Other Non-Food
+679;MARLBORO CLASSICS;Clothing Stores;Other Non-Food
+680;DIESEL;Clothing Stores;Other Non-Food
+681;LYON;Clothing Stores;Other Non-Food
+682;RUTE 180;Clothing Stores;Other Non-Food
+683;LASSE HJORTNÆS;Clothing Stores;Other Non-Food
+684;MR. HARRIS;Clothing Stores;Other Non-Food
+685;IN WEAR/PARTTWO/MATINIQU;Clothing Stores;Other Non-Food
+686;SAND;Clothing Stores;Other Non-Food
+687;YOU & ME;Clothing Stores;Other Non-Food
+688;OPINIONLEADING SHOPS;Clothing Stores;Other Non-Food
+689;FIRST COMPANY STORE;Clothing Stores;Other Non-Food
+690;BIRK SKO;Clothing Stores;Other Non-Food
+691;FRANKO SKO;Clothing Stores;Other Non-Food
+692;JETTE RIIS;Clothing Stores;Other Non-Food
+693;SALLING;Other Non-Food;Other Non-Food
+694;ILLUMS;Other Non-Food;Other Non-Food
+695;FLEUR;Clothing Stores;Other Non-Food
+696;INDISKA;Clothing Stores;Other Non-Food
+697;H&M ROWELLS POSTORDRE;Clothing Stores;Other Non-Food
+698;JOSEFSSONS POSTORDRE;Clothing Stores;Other Non-Food
+699;GREEN HOUSE POSTO. BEKL;Clothing Stores;Other Non-Food
+700;GUNTOFT;Clothing Stores;Other Non-Food
+701;LAURA;Clothing Stores;Other Non-Food
+702;GADSBØL;Clothing Stores;Other Non-Food
+703;JANUS;Clothing Stores;Other Non-Food
+704;REBECCA;Clothing Stores;Other Non-Food
+705;TROELSTRUP;Clothing Stores;Other Non-Food
+706;JEFFERSON;Clothing Stores;Other Non-Food
+707;TRIUMPH SHOP;Clothing Stores;Other Non-Food
+708;CHANGE (LINGERI-FORR.);Clothing Stores;Other Non-Food
+709;MISSYA (LINGERI-FORR.);Clothing Stores;Other Non-Food
+730;BAUHAUS;DIY Stores;Other Non-Food
+748;SILVAN;DIY Stores;Other Non-Food
+752;MALERFORRETNINGERØVRIGE;DIY Stores;Other Non-Food
+753;IKEA;Other Non-Food;Other Non-Food
+757;RÅD OG DÅD, BYGGEMARKED;DIY Stores;Other Non-Food
+759;BYGGEMARKEDER ØVRIGE;DIY Stores;Other Non-Food
+762;BUILD A BEAR;Toy Stores;Toy Stores
+763;TOYCITY INTERNET;Toy Stores;Toy Stores
+764;BR INTERNET;Toy Stores;Toy Stores
+765;BR;Toy Stores;Toy Stores
+766;SUPERLEG;Toy Stores;Toy Stores
+767;LEGETØJ ØVRIGE;Toy Stores;Toy Stores
+768;TOYS R US;Toy Stores;Toy Stores
+769;LEGEKÆDEN;Toy Stores;Toy Stores
+770;EL GIGANT RADIO/TV ØV.;Electronics Stores;Electronics Stores
+771;FOTOFORRETNINGER ØVRIGE;Electronics Stores;Electronics Stores
+772;BOGHANDEL ØVRIGE;Other Non-Food;Other Non-Food
+773;ÆRLIGE BENT(ISENKRÆMMER);Other Non-Food;Other Non-Food
+774;ISENKRÆMMER;Other Non-Food;Other Non-Food
+775;HOBBYFORRETNINGER;Other Non-Food;Other Non-Food
+776;FONA;Electronics Stores;Electronics Stores
+777;FREDGAARD;Electronics Stores;Electronics Stores
+778;SELANDIA;Electronics Stores;Electronics Stores
+779;EXPERT;Electronics Stores;Electronics Stores
+780;2TAL;Electronics Stores;Electronics Stores
+781;MERLIN;Electronics Stores;Electronics Stores
+782;BOG&IDE;Other Non-Food;Other Non-Food
+783;BABYUDSTYR;Other Non-Food;Other Non-Food
+784;VIDEOKIOSK/VIDEOUDL.;Kiosk/Gas station;Other Non-Food
+785;MUSIKFORRETNING;Electronics Stores;Electronics Stores
+786;PELS/SKIND FORRETNING;Clothing Stores;Other Non-Food
+787;SKALA/BECK & JØRGENSEN;DIY Stores;Other Non-Food
+788;BECKMANNS FARVEH.;DIY Stores;Other Non-Food
+789;MALERMESTER;DIY Stores;Other Non-Food
+790;HYGROS;DIY Stores;Other Non-Food
+791;WOODY;DIY Stores;Other Non-Food
+792;COMPUTER FORRETNING;Electronics Stores;Electronics Stores
+793;VIDEOUDLEJNINGSBUTIK;Electronics Stores;Electronics Stores
+794;10/20KR'S BUTIKKER;Other Non-Food;Other Non-Food
+795;GULD & SØLV / URMAGER;Other Non-Food;Other Non-Food
+796;ELEKTRONISK SPIL PC MM.;Electronics Stores;Electronics Stores
+998;ABONNEMENT;Internet/Mail Order;Internet/Mail Order/Mail Order
+189;DANSKE SPIL.DK;Internet/Mail Order;Internet/Mail Order
+16;UKENDT (16);Ukendt;Ukendt
+107;UKENDT (107);Ukendt;Ukendt
+108;UKENDT (108);Ukendt;Ukendt
+122;UKENDT (122);Ukendt;Ukendt
+410;UKENDT (410);Ukendt;Ukendt
+982;UKENDT (982);Ukendt;Ukendt
+224;Min Købmand;Small Supermarkets;SuperGros
+225;MENY;Small Supermarkets;SuperGros
+188;OSUMA;Internet/Mail Order;Internet/Mail Order/Mail Order
+400;NORMAL;Other Non-Food;Other Non-Food
+325;MENY GOURMET;Small Supermarkets;SuperGros
+500;Freemarket;Other Food;Other Food
+250;AMBER;Soft Discount;Other Food
+300;MAD COOPERATIVET;Small Supermarkets;COOP
+200;Shobr.com;Internet/Mail Order;Internet/Mail Order
+160;Wefood;Other Food;Other Food
+660;SEPHORA;KOSMETIK;KOSMETIK
+320;LØS MARKET;Other Food;Other Food
+433;CIRCLE K;Kiosk/Gas station;Convenience
+800;luxplus.dk;KOSMETIK;KOSMETIK
+801;smashbox.dk;KOSMETIK;KOSMETIK
+802;magasin.dk;KOSMETIK;KOSMETIK
+803;cocopanda.dk;KOSMETIK;KOSMETIK
+804;makeup-online.dk;KOSMETIK;KOSMETIK
+805;nicehair.dk;KOSMETIK;KOSMETIK
+806;skopalike.dk;KOSMETIK;KOSMETIK
+807;ezzence.dk;KOSMETIK;KOSMETIK
+808;beautycos.dk;KOSMETIK;KOSMETIK
+809;Maccosmetics.dk;KOSMETIK;KOSMETIK
+810;biligvoks.dk;KOSMETIK;KOSMETIK
+811;Elfcosmetics.dk;KOSMETIK;KOSMETIK
+812;Untoldsecretz.com;KOSMETIK;KOSMETIK
+813;Sooluxury.dk;KOSMETIK;KOSMETIK
+814;Blixenvixen.dk;KOSMETIK;KOSMETIK
+815;Pureshop.dk;KOSMETIK;KOSMETIK
+816;naturestore.dk;KOSMETIK;KOSMETIK
+817;Matas.dk;KOSMETIK;KOSMETIK
+818;Sephora.dk;KOSMETIK;KOSMETIK
+819;Stylebox.dk;KOSMETIK;KOSMETIK
+820;asos.com;KOSMETIK;KOSMETIK
+821;shopusa.com;KOSMETIK;KOSMETIK
+822;strawberrynet.com;KOSMETIK;KOSMETIK
+823;lookfantastic.com;KOSMETIK;KOSMETIK
+824;puremakeup.dk;KOSMETIK;KOSMETIK
+825;Goshcopenhagen.com;KOSMETIK;KOSMETIK
+826;eyeslipsface.co.uk;KOSMETIK;KOSMETIK
+827;nordicbeautyshop.com;KOSMETIK;KOSMETIK
+828;beautybay.com;KOSMETIK;KOSMETIK
+829;missglow.dk;KOSMETIK;KOSMETIK
+995;GrisOgKo.dk;Internet/Mail Order;Internet/Mail Order
+260;LANDMAD;Other Food;Other Food
+831;HENNES & MAURITZ ONLINE;Internet/Mail Order;Internet/Mail Order
+830;BILKA.DK;Internet/Mail Order;Internet/Mail Order
+832;THE BODY SHOP ONLINE;Internet/Mail Order;Internet/Mail Order
+47;THE BODY SHOP;Drugstore/HPC;Other Non-Food
+833;Rema 1000.dk (Vigo);Internet/Mail Order;Internet/Mail Order
+867;BilkaToGo.dk;Internet/Mail Order;Internet/Mail Order
+201;Kokkens Hverdagsmad.dk;Internet/Mail Order;Internet/Mail Order/Mail Order
+834;"Familiemåltider.dk
+";Internet/Mail Order;Internet/Mail Order
+835;"Den Grønne Asparges.dk
+";Internet/Mail Order;Internet/Mail Order
+836;"Indkøbslisten.dk
+";Internet/Mail Order;Internet/Mail Order
+837;"Salt Og Peber.dk
+";Internet/Mail Order;Internet/Mail Order
+838;"Simple Feast.com
+";Internet/Mail Order;Internet/Mail Order
+839;"Sund Takeaway.dk
+";Internet/Mail Order;Internet/Mail Order
+840;"Sunde Måltider.dk
+";Internet/Mail Order;Internet/Mail Order
+841;"Økologisk Supermarked.dk
+";Internet/Mail Order;Internet/Mail Order
+842;"Økovejen.dk
+";Internet/Mail Order;Internet/Mail Order
+843;Apopro.dk;Internet/Mail Order;Internet/Mail Order
+401;MINIMAL;Other Non-Food;Other Non-Food
+865;Fillop.netto.dk;Internet/Mail Order;Internet/Mail Order
+866;Køboghent.føtex.dk;Internet/Mail Order;Internet/Mail Order
+304;COOP 365;Soft Discount;Coop
+844;Fresh.Land;Internet/Mail Order;Internet/Mail Order
+845;HelloFresh.dk;Internet/Mail Order;Internet/Mail Order
+846;Kaffekapslen.dk;Internet/Mail Order;Internet/Mail Order
+847;KaffeKompaniet.com;Internet/Mail Order;Internet/Mail Order
+848;Mecindo.dk;Internet/Mail Order;Internet/Mail Order
+849;Med24.dk;Internet/Mail Order;Internet/Mail Order
+850;Motatos.dk;Internet/Mail Order;Internet/Mail Order
+851;MuscleHouse.dk;Internet/Mail Order;Internet/Mail Order
+852;Måltidsboxen.dk;Internet/Mail Order;Internet/Mail Order
+853;Nespresso.com;Internet/Mail Order;Internet/Mail Order
+854;Rigtigmad.dk;Internet/Mail Order;Internet/Mail Order
+855;Webapoteket.dk;Internet/Mail Order;Internet/Mail Order
+856;Bodylab.dk;Internet/Mail Order;Internet/Mail Order
+857;DetDanskeMadhus.dk;Internet/Mail Order;Internet/Mail Order
+858;Zooplus.dk;Internet/Mail Order;Internet/Mail Order
