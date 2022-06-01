@@ -5,19 +5,16 @@ date: "27/05/2022"
 output: html_document
 ---
 
-This script takes the pre-processed data in the form of the coded variables, reshapes these into one dataframe, and then builds a series of models to test. The following steps are taken: 
+This script is part 4 in the series of 4. 
 
-Covariates 
-1. Determine the number of states by varying the number of states from 1 - X and observing the BIC 
-2. Run the model 
+It takes the pre-processed data in the form of the coded variables, reshapes these into one dataframe, and then builds a series of HMM models to test. The following steps are taken: 
 
-```{r}
-# quickfix 
-test <- data 
-data$Organic_Preference[data$Organic_Preference == 0] <- 2
-data$Price_Sensitivity[is.na(data$Price_Sensitivity)] <- 2
-sum(is.na(data$Price_Sensitivity))
-```
+Step 1: Reshape the data into one data frame 
+Step 2: Add background Covariate information to the data frame 
+Step 3: Build Hidden Markov Models and Perform Model Selection 
+Step 4: Run final model and analyse results 
+
+Output of script: Model results and plots
 
 ## Setup 
 ```{r setup}
@@ -35,8 +32,10 @@ library(readr)
 library(mice)
 library(haven)
 library(rio)
+library(ggplot2)
 ```
 
+## Step 1: Reshape Data into one data frame
 ```{r Load data}
 dairy_coded <- read.csv("data/coded_data/dairy.csv")
 meat_coded <- read.csv("data/coded_data/meat.csv")
@@ -52,6 +51,7 @@ confectionery_coded$hhnr <- as.factor(confectionery_coded$hhnr)
 ```
 
 ```{r reshape_data}
+# -- Step 1: Reshape Data -- 
 # -- Set the data into long format (ie 8 rows per household for each period) -- 
 dairy_coded <- dairy_coded %>% 
   pivot_longer(!hhnr, names_to = "Period", values_to = "Dairy")
@@ -82,10 +82,10 @@ rm(dairy_coded, meat_coded, readymeal_coded, confectionery_coded)
 data$hhnr <- as.factor(data$hhnr)
 ```
 
-## Merge the covariate data onto ```data```
+## Step 2: Merge the covariate data onto ```data```
 To include covariates in our model, which allow us to determine the way initial and transition probabilities are distributed, we can take some background knowledge on the households and create covariate factors. This will happen along 3 lines of interest: 
 
-1. Environmental factors 
+1. Environmental factors (one variable)
 2. General demographics (Age)
 3. Economic factors (Organic attitude and price sensitivity)
 
@@ -102,8 +102,6 @@ households <- households[households$hhnr %in% hhnrs$hhnr,] # 1019 obs
 households$hhnr <- as.factor(households$hhnr)
 
 rm(hhnrs)
-
-
 ```
 
 #### -- Environmental -- 
@@ -127,6 +125,8 @@ nas <- environment %>% subset(is.na(food_production)) # 35 households have not a
 
 # -- Replace missing data -- 
 # We'll replace this data by estimating what the most likely responses are using mice
+# This is a more accurate method than replacing NAs with e.g. the mean and is an important
+#consideration here to ensure we are not implementing bias into the data
 
 # First make each of the four columns factors 
 environment$food_production <- as.factor(environment$food_production)
@@ -138,7 +138,6 @@ environment$global_warming <- as.factor(environment$global_warming)
 init = mice(environment, maxit=0) 
 meth = init$method
 predM = init$predictorMatrix
-
 
 # Set a seed and estimate values for the NAs 
 set.seed(318)
@@ -232,7 +231,6 @@ rm(price_sensitivity)
 ```
 
 ```{r save data}
-
 # Add a column to data of time as a numeric column 
 data <- transform(data, Period_num = factor(Period, labels = c(1, 2, 3, 4, 5, 6, 7, 8)))
 
@@ -240,7 +238,7 @@ data <- transform(data, Period_num = factor(Period, labels = c(1, 2, 3, 4, 5, 6,
 write.csv(data, "data/coded_data/model_data.csv")
 ```
 
-
+## Step 3: Build the Models 
 Prepare and explore data 
 ```{r prepare_data}
 # Rename the hhnr column to id 
@@ -255,7 +253,6 @@ data <- data %>% rename(id = hhnr,
 data$time <- as.numeric(data$time)
 
 # Get the data into the necessary LMest format 
-# 
 dt <- lmestData(data = data, id = "id", time="time",
                 responsesFormula= yDairy + yMeat + yReadyMeal + yConfectionery ~NULL)
 
@@ -266,12 +263,18 @@ summary(dt, dataSummary="responses", varType=rep("c",ncol(dt$Y)))
 ## Part 1: Determine the number of states 
 The first step in building our model is determining how many latent states exist within the data. These can be determined by varying the number of states and using the BIC criterion to determine the optimal number of states. ```LMest``` has an option to vary this for you, but we want to have a greater inspection of the models so we'll build models varying states from 2 -8. 
 Parameters: 
-First parameter = The response model, determining what is to be modelled. (Dairy, Meat, ReadyMeal and Confectionery responses) 
-Second parameter
+
 #### -- Model Selection: Number of States -- 
 When it comes to model selection, you want to chose the model which fits the data best while penalizing for unnecessary complexity. Thus, model selection is a balance between accuracy and complexity. There are 3 statistics which help us to determine how the model fits the data, the AIC, BIC, and Log Likelihood. These numbers in themselves are relatively meaningless, but we look for the lowest number for AIC and BIC, and the highest log-likelihood. This allows us to determine how the model fits. 
 
-In the below chunk, we will run a global search on a model including all predictors. We'll vary the number of states between 1 - 8 and compare the AIC, BIC, and log-likelihood for each state:
+In the below chunk, we will run a global search on a model including all predictors. We'll vary the number of states between 1 - 8 and compare the AIC, BIC, and log-likelihood for each state. The parameters are as follows: 
+**responsesFormula** = The response model, determining what is to be modelled. (Dairy, Meat, ReadyMeal and/or Confectionery responses) 
+**index** = Tells the model how to segment the data (by ID and time period)
+**version** = Telling the model what type the data is (categorical or continuous)
+**data** = The data frame to use 
+**k** = The number of states to vary between 
+**modBasic** = How to model the transition probabilities (1 = for time homogeneity)
+**seed** = Ensuring the model is replicatible 
 ```{r number_of_states}
 # -- Define the formula to use --
 fmLatent <- lmestFormula(data = data, response = "y",
@@ -301,14 +304,13 @@ aic <- data.frame(model$Aic)
 number_of_states <- c(1, 2, 3, 4, 5, 6, 7, 8)
 bic_plot <- cbind(bic, number_of_states, aic)
 
+# -- build plot pf the BIC --
 ggplot(bic_plot, aes(x=number_of_states)) + 
   geom_line(aes(y = model.Bic), color = "#9AC791") + 
-  geom_line(aes(y = model.Aic), color=#9C92B0, linetype="twodash") +
+  geom_line(aes(y = model.Aic), color= "#9C92B0", linetype="twodash") +
   theme_classic() + 
   labs(title = "AIC and BIC Values by Number of States", 
        x = "Number of States", y = "Model Criterion (BIC/ AIC)")
-
-
 ```
 
 The BIC continues to fall while the log-likelihood continues to rise as more states are added, however the difference becomes negligible in comparison to the complexity added to the model. We can get a better overview of these below: 
@@ -329,18 +331,10 @@ print(bic_differences)
 
 Thus, we can say that the optimal number of states for the model will be 4 or 5. We'll select 5 states to continue with our model. 
 
-```{r}
-install.packages("ggpubr")
-library(ggpubr)
-
-cor.test(data$Age, data$environmental_concern)
-```
-
-
 #### -- Model Selection: Covariates -- 
 We can now estimate a hidden markov model with covariates affecting the distribution of the latent process, by fixing the number of states (k = 5). We're looking for covariates which can explain state ownership well, so we'll look to see how they vary for each state across the a covariates and how adding each affects the model: 
 
-In the below section, we'll build and run models varying the covariates used to calculate the initial and transition probabilities. We'll explore the below X models and use the BIC as criterion to determine whether the predictor improves the model: 
+In the below section, we'll build and run models varying the covariates used to calculate the initial and transition probabilities. We'll explore the below 6 models and use the BIC as criterion to determine whether the predictor improves the model: 
 
 ```{r covariates_alone}
 # -- Define the formulas -- 
@@ -452,8 +446,11 @@ final_model <-lmest(responsesFormula = responsesFormula,
 final_model$Bic
 ```
 
+## -- Step 4: Final model and results -- 
+
 #### -- Analyse results -- 
-```{r}
+With the final model run, we can analyse our results using the summary function and inspecting all the outputs: 
+```{r inspecting_summary}
 # -- Inspect results -- 
 summary(final_model)
 
@@ -509,16 +506,16 @@ plot(final_model, what="marginal")
 
 ```
 
-
 #### Clean up environment 
 ```{r}
 rm(fmBasic, fmModel1, fmModel2, fmModel3, fmModel4, fmModel5, fmModel6)
 ```
 
+The model is now complete. Plots are available within the "Transition_matrix" chunk which tell us the transition probabilites while the summary tells us all the particular information we need to know. These are held in the "plots" and "output" folders. 
 
-
+#### -- Some additional calculations -- 
 #### Calculating purchasing power 
-```{r}
+```{r purchasing_power}
 # Subset important variables 
 purchasing_power <- data %>% select(1:6)
 
@@ -538,30 +535,5 @@ purchasing_power$Meat_purchases <- purchasing_power$Meat_purchases / 1019
 purchasing_power$ReadyMeal_purchases <- purchasing_power$ReadyMeal_purchases / 1019
 purchasing_power$Confect_purchases <- purchasing_power$Confect_purchases / 1019
 
-#Buying stability 
-buying_stability <- data %>% select(1:6)
-
-buying_stability <- buying_stability %>% group_by(id) %>% 
-  mutate(hh_Dairy = sum(yDairy), 
-         hh_Meat = sum(yMeat), 
-         hh_ReadyMeals = sum(yReadyMeal), 
-         hh_Confect = sum(yConfectionery))
-
-# Quick fix 
-test <- buying_stability %>% distinct(id, .keep_all = T)
-
-#A proportion 
-test <- test %>% subset(hh_Dairy > 0) # 940
-sum(test$hh_Dairy == 2)
-
-68 * 0.
-
-test <- test %>% subset(hh_Confect > 2)
-
-mean(test$hh_Confect)
-590 / 1019
-
 ```
-
-
 
