@@ -5,7 +5,7 @@ date: "21/05/2022"
 output: html_document
 ---
 
-This script takes the cleaned sales and product data and classifies it into the 6 product categories of interest. These are described below: 
+This script is part 2 in the 4-part series. It takes the cleaned sales and product data and classifies it into the 6 product categories of interest. These are described below: 
 
 **Dairy Alternatives** = product classified as a dairy alternative when the product being replaced is a typical dairy product (i.e., a product made from milk). This will include milk, cream, cheese, yoghurt, kefir, butter, buttermilk, koldskøl, creme fraiche, condensed milk and ice cream. 
 
@@ -82,9 +82,7 @@ count_purchases <- function(df) {
     select(hhnr, purchases)
   return(counted_data)
 }
-
 ```
-
 
 
 # Part 1: Categorising new-plant products 
@@ -140,7 +138,6 @@ Fruit & Vegetables = these are organic products but not alternatives
 Spice_mix = seasoning and not alternative
 oils = naturally plant-based so not an alternative 
 hummus = not typically made with non-plant-based products 
-falafel = not typically made with non-plant-based products
 juice = not typically made with non-plant-based products
 water = not typically made with non-plant-based products 
 tea = not typically made with non-plant-based products 
@@ -153,7 +150,6 @@ celeriac <- plant_based_data[grep("Celeriac", plant_based_data$Product), ] # 1 o
 spice_mix <- plant_based_data[grep("Spice Mix", plant_based_data$Product), ] # 5 obs 
 oils <- plant_based_data[grep("Coconut Oil", plant_based_data$Product), ] # 2 obs 
 hummus <- plant_based_data[grep("Hummus", plant_based_data$Product), ] # 6 obs
-falafel <- plant_based_data[grep("Falafel", plant_based_data$Product), ] # 6 obs 
 juice <- plant_based_data[grep("Juice", plant_based_data$Product), ] # 3 obs 
 water <- plant_based_data[grep("Water", plant_based_data$Product), ] # 4 obs 
 tea <- plant_based_data[grep("Tea", plant_based_data$Product), ] # 4 obs
@@ -413,6 +409,7 @@ rm(sugar_products, chocolate, snacks, desserts, baked_goods, confectionery, not_
 ```
 
 #### Check the remaining products don't fit into any categories 
+Here, we've been using the pb_to_categorise to extract the catgorised products through via a process of eliminations. We can now see what remains within this data frame: 
 ```{r check_remaining}
 # -- view remaining products -- 
 table(pb_to_categorise$Product)
@@ -562,6 +559,8 @@ write.csv(pb_readymeals,
 write.csv(pb_confectionery, 
           "data/product_data/new_product_data/new_product_sales/new_confectionery_sales.csv")
 ```
+
+
 
 
 
