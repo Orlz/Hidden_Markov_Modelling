@@ -2,7 +2,9 @@
 title: "Hidden Markov Model"
 author: "Orla Mallon"
 date: "27/05/2022"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 This script is part 4 in the series of 4. 
